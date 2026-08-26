@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LE COLLEZIONI · Equipo Creativo</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0f0f10;
+  --panel:#17171a;
+  --panel-2:#1e1e22;
+  --border:#2a2a2f;
+  --text:#eae7e1;
+  --text-dim:#9a978f;
+  --gold:#c9a45c;
+  --gold-dim:#8a7245;
+  --ok:#6fae7a;
+  --warn:#d9a441;
+  --danger:#c05a52;
+  --radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Helvetica Neue',Arial,sans-serif;
+  min-height:100vh;
+}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+
+a{color:var(--gold);}
+.hidden{display:none !important;}
+
+/* ---------- LAYOUT ---------- */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 28px;border-bottom:1px solid var(--border);
+  background:var(--panel);position:sticky;top:0;z-index:50;
+}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand .crown{color:var(--gold);font-size:20px;}
+.brand h1{font-size:16px;font-weight:600;letter-spacing:.5px;}
+.brand .sub{font-size:11px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;}
+.mode-badge{
+  font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid var(--gold-dim);
+  color:var(--gold);letter-spacing:.5px;text-transform:uppercase;
+}
+.tabs{display:flex;gap:4px;padding:0 28px;border-bottom:1px solid var(--border);background:var(--panel);overflow-x:auto;}
+.tab{
+  padding:12px 16px;font-size:13px;color:var(--text-dim);cursor:pointer;
+  border-bottom:2px solid transparent;white-space:nowrap;
+}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+.tab:hover{color:var(--text);}
+main{padding:24px 28px 60px;max-width:1400px;margin:0 auto;}
+.view{display:none;}
+.view.active{display:block;}
+
+/* ---------- CARDS / GRID ---------- */
+.grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;}
+.card .label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-dim);margin-bottom:8px;}
+.card .value{font-size:28px;font-weight:600;}
+.card .value.gold{color:var(--gold);}
+.card .value.danger{color:var(--danger);}
+.card .sub{font-size:12px;color:var(--text-dim);margin-top:4px;}
+
+.section-title{font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin:28px 0 14px;display:flex;align-items:center;justify-content:space-between;}
+
+.charts-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin-bottom:24px;}
+.chart-box{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+.chart-box h3{font-size:13px;font-weight:500;color:var(--text-dim);margin-bottom:12px;}
+.chart-box canvas{max-height:220px;}
+@media(max-width:900px){.charts-grid{grid-template-columns:1fr;}}
+
+/* ---------- BUTTONS ---------- */
+.btn{
+  background:var(--gold);color:#141414;border:none;padding:9px 16px;border-radius:6px;
+  font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.3px;
+}
+.btn:hover{background:#d9b86e;}
+.btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn.secondary:hover{border-color:var(--gold-dim);}
+.btn.danger{background:transparent;border:1px solid var(--danger);color:var(--danger);}
+.btn.small{padding:5px 10px;font-size:12px;}
+
+/* ---------- TABLE / LISTS ---------- */
+.list-row{
+  display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--panel);
+  border:1px solid var(--border);border-radius:8px;margin-bottom:8px;
+}
+.avatar{
+  width:36px;height:36px;border-radius:50%;background:var(--panel-2);border:1px solid var(--gold-dim);
+  display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--gold);flex-shrink:0;
+}
+.pill{font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid var(--border);white-space:nowrap;}
+.pill.ok{color:var(--ok);border-color:var(--ok);}
+.pill.warn{color:var(--warn);border-color:var(--warn);}
+.pill.danger{color:var(--danger);border-color:var(--danger);}
+.pill.dim{color:var(--text-dim);}
+
+.progress-bar{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden;margin-top:6px;}
+.progress-fill{height:100%;background:var(--gold);}
+
+/* ---------- KANBAN ---------- */
+.kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+@media(max-width:900px){.kanban{grid-template-columns:1fr;}}
+.kanban-col{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:200px;}
+.kanban-col h4{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);margin-bottom:10px;display:flex;justify-content:space-between;}
+.kcard{
+  background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;
+  font-size:13px;cursor:grab;
+}
+.kcard.dragging{opacity:.4;}
+.kcard .t{font-weight:600;margin-bottom:4px;}
+.kcard .meta{font-size:11px;color:var(--text-dim);display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.kanban-col.dragover{border-color:var(--gold);}
+
+/* ---------- FORMS / MODAL ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;
+  z-index:200;padding:20px;
+}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;}
+.modal h3{margin-bottom:16px;font-size:16px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:5px;}
+.field input,.field select,.field textarea{
+  width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;
+  padding:9px 11px;color:var(--text);font-size:13px;font-family:inherit;
+}
+.field textarea{resize:vertical;min-height:60px;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;}
+
+/* ---------- GATE (login / no access) ---------- */
+.gate{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;text-align:center;padding:20px;
+}
+.gate .crown-big{font-size:36px;color:var(--gold);}
+.gate input{
+  background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;color:var(--text);
+  font-size:14px;width:260px;text-align:center;
+}
+.gate p{color:var(--text-dim);font-size:13px;max-width:360px;}
+
+.readonly-badge{
+  display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);
+  border:1px solid var(--border);padding:4px 10px;border-radius:20px;margin-bottom:16px;
+}
+
+.toast{
+  position:fixed;bottom:20px;right:20px;background:var(--panel-2);border:1px solid var(--gold-dim);
+  color:var(--text);padding:12px 18px;border-radius:8px;font-size:13px;z-index:300;
+}
+
+.empty-state{color:var(--text-dim);font-size:13px;padding:20px;text-align:center;}
+
+.row-actions{display:flex;gap:6px;margin-left:auto;flex-shrink:0;}
+.flex-grow{flex:1;min-width:0;}
+.person-name{font-weight:600;font-size:14px;}
+.person-role{font-size:12px;color:var(--text-dim);}
+
+/* ---------- FILTROS ---------- */
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+.filtros select,.filtros input{
+  background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--text);
+  font-size:12px;padding:7px 10px;font-family:inherit;
+}
+.filtros input[type="text"]{min-width:160px;}
+
+/* ---------- BANNER ALERTA ---------- */
+.alert-banner{
+  background:rgba(192,90,82,.12);border:1px solid var(--danger);color:var(--danger);
+  border-radius:8px;padding:12px 16px;font-size:13px;margin-bottom:18px;
+}
+
+/* ---------- AVANCES ---------- */
+.avance-item{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;font-size:12px;}
+.avance-item .meta-line{color:var(--text-dim);font-size:11px;margin-top:4px;}
+.avance-form{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);}
+
+/* ---------- KANBAN reasignación rápida ---------- */
+.kcard select.reassign{
+  width:100%;margin-top:6px;font-size:11px;padding:4px 6px;background:var(--panel);
+  border:1px solid var(--border);border-radius:4px;color:var(--text);
+}
+
+/* ---------- CALENDARIO ---------- */
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.cal-header h3{font-size:15px;font-weight:600;text-transform:capitalize;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.cal-daylabel{font-size:11px;color:var(--text-dim);text-align:center;padding-bottom:4px;text-transform:uppercase;}
+.cal-cell{
+  background:var(--panel);border:1px solid var(--border);border-radius:8px;min-height:70px;padding:6px;
+  font-size:11px;cursor:pointer;
+}
+.cal-cell.empty{background:transparent;border:none;cursor:default;}
+.cal-cell.today{border-color:var(--gold);}
+.cal-cell .num{color:var(--text-dim);font-size:11px;margin-bottom:4px;}
+.cal-cell .count{color:var(--gold);font-weight:600;font-size:12px;}
+.cal-cell:hover{border-color:var(--gold-dim);}
+@media(max-width:700px){.cal-grid{gap:3px;} .cal-cell{min-height:44px;padding:4px;font-size:10px;}}
+
+/* ---------- MOBILE ---------- */
+@media(max-width:640px){
+  .topbar{padding:14px 16px;flex-wrap:wrap;gap:8px;}
+  main{padding:16px 14px 50px;}
+  .tabs{padding:0 14px;}
+  .tab{padding:10px 12px;font-size:12px;}
+  .modal{padding:18px;}
+  .list-row{flex-wrap:wrap;}
+  .row-actions{width:100%;justify-content:flex-end;margin-left:0;}
+  .grid-cards{grid-template-columns:repeat(2,1fr);}
+}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const SUPABASE_URL = "https://yfppwtnrvkzlfigyvpgr.supabase.co";
+const SUPABASE_KEY = "sb_publishable_7fruHz3lVitB6i1j5uA8bA_QR9NdCp1";
+const BUCKET_ARCHIVOS = "archivos";
+const UMBRAL_SOBRECARGA = 5; // tareas activas para considerarse "sobrecargado"
+const UMBRAL_OPTIMO = 2;     // tareas activas mínimas para "óptimo" (menos = "bajo")
+const DIAS_ALERTA_VENCIMIENTO = 3; // avisar cuando falten X días o menos
+
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+const ESTADOS_TAREA = [
+  {key:'pendiente', label:'Pendiente'},
+  {key:'en_progreso', label:'En progreso'},
+  {key:'en_revision', label:'En revisión'},
+  {key:'completada', label:'Completada'}
+];
+const PRIORIDADES = ['baja','media','alta','urgente'];
+const ESTADOS_PROYECTO = ['planeacion','en_curso','en_revision','completado','pausado'];
+const ESTADOS_TALENTO = ['activo','onboarding','inactivo'];
+
+let STATE = {
+  mode: null, // 'admin' | 'aprendiz' | 'jefe' | null
+  talentoId: null, // for aprendiz mode
+  talentos: [], proyectos: [], tareas: [], metas: [], avances: [],
+  activeTab: 'dashboard',
+  charts: {},
+  filtroTareas: {talento:'', proyecto:'', prioridad:'', estado:'', q:''},
+  calFecha: new Date()
+};
+
+/* ============================================================
+   UTILS
+   ============================================================ */
+function $(sel,ctx=document){return ctx.querySelector(sel);}
+function el(html){const d=document.createElement('div');d.innerHTML=html.trim();return d.firstElementChild;}
+function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}); }
+function isAtrasada(t){
+  if(t.estado==='completada') return false;
+  if(!t.fecha_entrega) return false;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fe = new Date(t.fecha_entrega+'T00:00:00');
+  return fe < hoy;
+}
+function toast(msg){
+  const t = el(`<div class="toast">${msg}</div>`);
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2800);
+}
+function talentoNombre(id){ const t = STATE.talentos.find(x=>x.id===id); return t? t.nombre : '—'; }
+function proyectoNombre(id){ const p = STATE.proyectos.find(x=>x.id===id); return p? p.nombre : '—'; }
+function initials(name){ return (name||'?').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+function pillPrioridad(p){
+  const map = {baja:'dim', media:'dim', alta:'warn', urgente:'danger'};
+  return `<span class="pill ${map[p]||'dim'}">${p}</span>`;
+}
+function pillEstadoTarea(t){
+  if(isAtrasada(t)) return `<span class="pill danger">Atrasada</span>`;
+  const map = {pendiente:'dim', en_progreso:'warn', en_revision:'warn', completada:'ok', bloqueada:'danger'};
+  const labels = {pendiente:'Pendiente', en_progreso:'En progreso', en_revision:'En revisión', completada:'Completada', bloqueada:'Bloqueada'};
+  return `<span class="pill ${map[t.estado]||'dim'}">${labels[t.estado]||t.estado}</span>`;
+}
+function diasParaVencer(t){
+  if(!t.fecha_entrega) return null;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fe = new Date(t.fecha_entrega+'T00:00:00');
+  return Math.round((fe-hoy)/86400000);
+}
+function pillVencimiento(t){
+  if(t.estado==='completada' || isAtrasada(t)) return '';
+  const d = diasParaVencer(t);
+  if(d===null || d>DIAS_ALERTA_VENCIMIENTO) return '';
+  const label = d===0? 'Vence hoy' : d===1? 'Vence mañana' : `Vence en ${d}d`;
+  return `<span class="pill warn">${label}</span>`;
+}
+function avancesDe(tareaId){
+  return STATE.avances.filter(a=>a.tarea_id===tareaId).sort((a,b)=> new Date(b.created_at)-new Date(a.created_at));
+}
+
+/* Cálculos de carga y cumplimiento */
+function tareasActivasDe(talentoId){
+  return STATE.tareas.filter(t=>t.talento_id===talentoId && t.estado!=='completada' && t.estado!=='bloqueada');
+}
+function nivelCarga(talentoId){
+  const n = tareasActivasDe(talentoId).length;
+  if(n >= UMBRAL_SOBRECARGA) return {n, label:'Sobrecargado', cls:'danger'};
+  if(n >= UMBRAL_OPTIMO) return {n, label:'Óptimo', cls:'ok'};
+  return {n, label:'Bajo', cls:'dim'};
+}
+function cumplimientoDe(talentoId){
+  const finalizadas = STATE.tareas.filter(t=>t.talento_id===talentoId && t.estado==='completada');
+  if(finalizadas.length===0) return null;
+  const aTiempo = finalizadas.filter(t=>{
+    if(!t.fecha_entrega) return true;
+    return new Date(t.updated_at) <= new Date(t.fecha_entrega+'T23:59:59');
+  });
+  return Math.round((aTiempo.length/finalizadas.length)*100);
+}
+function tareasAtrasadasDe(talentoId){
+  return STATE.tareas.filter(t=>t.talento_id===talentoId && isAtrasada(t)).length;
+}
+
+/* ============================================================
+   BOOT / ROUTING
+   ============================================================ */
+async function boot(){
+  const params = new URLSearchParams(location.search);
+  if(params.get('admin')==='1'){
+    STATE.mode='admin';
+    renderAdminGate();
+  } else if(params.has('aprendiz')){
+    STATE.mode='aprendiz';
+    STATE.talentoId = params.get('aprendiz');
+    await loadAll();
+    renderAprendizView();
+    subscribeRealtime(renderAprendizView);
+  } else if(params.get('vista')==='jefe'){
+    STATE.mode='jefe';
+    await loadAll();
+    renderJefeView();
+    subscribeRealtime(renderJefeView);
+  } else {
+    renderNoAccess();
+  }
+}
+
+function renderNoAccess(){
+  $('#app').innerHTML = `
+    <div class="gate">
+      <div class="crown-big">♛</div>
+      <h2>LE COLLEZIONI · Equipo Creativo</h2>
+      <p>Este acceso requiere un link válido. Si eres parte del equipo, pide tu link de acceso al administrador.</p>
+    </div>`;
+}
+
+function renderAdminGate(){
+  $('#app').innerHTML = `
+    <div class="gate">
+      <div class="crown-big">♛</div>
+      <h2>Acceso administrador</h2>
+      <p>Ingresa la contraseña para gestionar el equipo creativo.</p>
+      <input type="password" id="admin-pass" placeholder="Contraseña">
+      <button class="btn" id="admin-login-btn">Entrar</button>
+      <div id="admin-error" style="color:var(--danger);font-size:12px;"></div>
+    </div>`;
+  $('#admin-login-btn').onclick = tryAdminLogin;
+  $('#admin-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') tryAdminLogin(); });
+  $('#admin-pass').focus();
+}
+async function tryAdminLogin(){
+  const val = $('#admin-pass').value;
+  const btn = $('#admin-login-btn'); btn.disabled = true; btn.textContent = 'Verificando...';
+  try{
+    const { data } = await supa.from('config').select('value').eq('key','admin_password_hash').single();
+    const hash = await sha256Hex(val);
+    if(data && hash === data.value){
+      await loadAll();
+      renderAdminApp();
+      subscribeRealtime(()=>{ if(STATE.mode==='admin') renderAdminTab(); });
+    } else {
+      $('#admin-error').textContent = 'Contraseña incorrecta.';
+      btn.disabled = false; btn.textContent = 'Entrar';
+    }
+  }catch(err){
+    $('#admin-error').textContent = 'No se pudo verificar. Revisa que corriste la migración v2 en Supabase.';
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+
+async function loadAll(){
+  const [t,p,ta,m,av] = await Promise.all([
+    supa.from('talentos').select('*').order('nombre'),
+    supa.from('proyectos').select('*').order('created_at',{ascending:false}),
+    supa.from('tareas').select('*').order('created_at',{ascending:false}),
+    supa.from('metas').select('*').order('created_at',{ascending:false}),
+    supa.from('avances').select('*').order('created_at',{ascending:false}),
+  ]);
+  STATE.talentos = t.data || [];
+  STATE.proyectos = p.data || [];
+  STATE.tareas = ta.data || [];
+  STATE.metas = m.data || [];
+  STATE.avances = av.data || [];
+}
+
+function subscribeRealtime(cb){
+  supa.channel('cambios-equipo')
+    .on('postgres_changes', {event:'*', schema:'public', table:'talentos'}, async()=>{ await loadAll(); cb(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'proyectos'}, async()=>{ await loadAll(); cb(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'tareas'}, async()=>{ await loadAll(); cb(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'metas'}, async()=>{ await loadAll(); cb(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'avances'}, async()=>{ await loadAll(); cb(); })
+    .subscribe();
+}
+
+/* ============================================================
+   VISTA APRENDIZ (solo lectura)
+   ============================================================ */
+function renderAprendizView(){
+  const talento = STATE.talentos.find(t=> t.id===STATE.talentoId || t.nombre.toLowerCase()===decodeURIComponent(STATE.talentoId).toLowerCase());
+  if(!talento){
+    $('#app').innerHTML = `<div class="gate"><div class="crown-big">♛</div><h2>Talento no encontrado</h2><p>Verifica tu link de acceso con el administrador.</p></div>`;
+    return;
+  }
+  if(talento.acceso_habilitado === false){
+    $('#app').innerHTML = `<div class="gate"><div class="crown-big">♛</div><h2>Acceso desactivado</h2><p>Tu acceso a este panel fue desactivado. Contacta al administrador si crees que es un error.</p></div>`;
+    return;
+  }
+  const misTareas = STATE.tareas.filter(t=>t.talento_id===talento.id).sort((a,b)=> new Date(a.fecha_entrega||'2100-01-01') - new Date(b.fecha_entrega||'2100-01-01'));
+  const activas = tareasActivasDe(talento.id).length;
+  const atrasadas = tareasAtrasadasDe(talento.id);
+  const cumpl = cumplimientoDe(talento.id);
+
+  $('#app').innerHTML = `
+    <div class="topbar">
+      <div class="brand"><span class="crown">♛</span><div><h1>LE COLLEZIONI</h1><div class="sub">Mis tareas</div></div></div>
+      <span class="mode-badge">Vista aprendiz</span>
+    </div>
+    <main>
+      <span class="readonly-badge">🔒 Solo lectura</span>
+      <div class="list-row" style="margin-bottom:20px;">
+        <div class="avatar">${talento.avatar_inicial || initials(talento.nombre)}</div>
+        <div>
+          <div class="person-name">${talento.nombre}</div>
+          <div class="person-role">${talento.rol}</div>
+        </div>
+      </div>
+      <div class="grid-cards">
+        <div class="card"><div class="label">Tareas activas</div><div class="value">${activas}</div></div>
+        <div class="card"><div class="label">Atrasadas</div><div class="value ${atrasadas>0?'danger':''}">${atrasadas}</div></div>
+        <div class="card"><div class="label">Cumplimiento</div><div class="value gold">${cumpl===null?'—':cumpl+'%'}</div></div>
+      </div>
+      <div class="section-title">Mis tareas</div>
+      <div id="mis-tareas"></div>
+    </main>`;
+
+  const cont = $('#mis-tareas');
+  if(misTareas.length===0){ cont.innerHTML = `<div class="empty-state">No tienes tareas asignadas todavía.</div>`; return; }
+  misTareas.forEach(t=>{
+    const avances = avancesDe(t.id);
+    cont.appendChild(el(`
+      <div class="list-row" style="align-items:flex-start;">
+        <div class="flex-grow">
+          <div class="person-name">${t.titulo}</div>
+          <div class="person-role">${proyectoNombre(t.proyecto_id)} · ${t.tipo||''}</div>
+          ${t.descripcion?`<div style="font-size:12px;color:var(--text-dim);margin-top:6px;">${t.descripcion}</div>`:''}
+          <div class="meta" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            ${pillEstadoTarea(t)} ${pillVencimiento(t)} ${pillPrioridad(t.prioridad)}
+            <span class="pill dim">Entrega: ${fmtDate(t.fecha_entrega)}</span>
+          </div>
+          ${avances.length? `<div style="margin-top:10px;">${avances.map(a=>`
+            <div class="avance-item">
+              ${a.descripcion}
+              <div class="meta-line">${a.autor||'Administrador'} · ${fmtDate(a.created_at.slice(0,10))}
+              ${a.archivo_url?` · <a href="${a.archivo_url}" target="_blank">Ver archivo</a>`:''}</div>
+            </div>`).join('')}</div>` : ''}
+        </div>
+      </div>`));
+  });
+}
+
+/* ============================================================
+   VISTA JEFE (solo lectura, dashboard completo)
+   ============================================================ */
+function renderJefeView(){
+  $('#app').innerHTML = `
+    <div class="topbar">
+      <div class="brand"><span class="crown">♛</span><div><h1>LE COLLEZIONI</h1><div class="sub">Equipo Creativo</div></div></div>
+      <span class="mode-badge">Vista dirección</span>
+    </div>
+    <main>
+      <span class="readonly-badge">🔒 Solo lectura</span>
+      <div class="grid-cards" id="jefe-cards"></div>
+      <div class="charts-grid">
+        <div class="chart-box"><h3>Carga por persona</h3><canvas id="chart-carga-jefe"></canvas></div>
+        <div class="chart-box"><h3>Distribución por estado</h3><canvas id="chart-estado-jefe"></canvas></div>
+      </div>
+      <div class="chart-box" style="margin-bottom:24px;"><h3>Tendencia de tareas completadas</h3><canvas id="chart-tendencia-jefe"></canvas></div>
+      <div class="section-title">Equipo</div>
+      <div id="jefe-talentos"></div>
+      <div class="section-title">Tablero</div>
+      <div class="kanban" id="jefe-kanban"></div>
+    </main>`;
+
+  renderDashboardCards('#jefe-cards');
+  renderCharts('chart-carga-jefe','chart-estado-jefe','chart-tendencia-jefe');
+  renderTalentosResumen('#jefe-talentos');
+  renderKanban('#jefe-kanban', false);
+}
+
+/* ============================================================
+   PIEZAS COMPARTIDAS: dashboard cards, charts, talentos, kanban
+   ============================================================ */
+function renderDashboardCards(sel){
+  const proyectosActivos = STATE.proyectos.filter(p=>p.estado==='en_curso'||p.estado==='en_revision').length;
+  const tareasActivas = STATE.tareas.filter(t=>t.estado!=='completada').length;
+  const tareasAtrasadas = STATE.tareas.filter(isAtrasada).length;
+  const completadas = STATE.tareas.filter(t=>t.estado==='completada');
+  let cumplGeneral = '—';
+  if(completadas.length>0){
+    const aTiempo = completadas.filter(t=> !t.fecha_entrega || new Date(t.updated_at) <= new Date(t.fecha_entrega+'T23:59:59'));
+    cumplGeneral = Math.round((aTiempo.length/completadas.length)*100)+'%';
+  }
+  let mayorCarga = '—';
+  if(STATE.talentos.length){
+    const withLoad = STATE.talentos.map(t=>({t, n:tareasActivasDe(t.id).length})).sort((a,b)=>b.n-a.n);
+    if(withLoad[0] && withLoad[0].n>0) mayorCarga = `${withLoad[0].t.nombre} (${withLoad[0].n})`;
+  }
+  const sobrecargados = STATE.talentos.filter(t=> nivelCarga(t.id).cls==='danger');
+  const banner = sobrecargados.length
+    ? `<div class="alert-banner">⚠ ${sobrecargados.length===1?'Una persona está':'Hay '+sobrecargados.length+' personas'} sobrecargada${sobrecargados.length===1?'':'s'}: ${sobrecargados.map(t=>t.nombre).join(', ')}. Considera redistribuir tareas.</div>`
+    : '';
+  const vencenPronto = STATE.tareas.filter(t=> !isAtrasada(t) && t.estado!=='completada' && diasParaVencer(t)!==null && diasParaVencer(t)<=DIAS_ALERTA_VENCIMIENTO && diasParaVencer(t)>=0).length;
+  const bannerVence = vencenPronto>0
+    ? `<div class="alert-banner" style="border-color:var(--warn);color:var(--warn);background:rgba(217,164,65,.1);">⏳ ${vencenPronto} tarea${vencenPronto===1?'':'s'} vence${vencenPronto===1?'':'n'} en los próximos ${DIAS_ALERTA_VENCIMIENTO} días.</div>`
+    : '';
+  $(sel).innerHTML = `
+    <div class="card"><div class="label">Proyectos activos</div><div class="value">${proyectosActivos}</div></div>
+    <div class="card"><div class="label">Tareas activas</div><div class="value">${tareasActivas}</div></div>
+    <div class="card"><div class="label">Tareas atrasadas</div><div class="value ${tareasAtrasadas>0?'danger':''}">${tareasAtrasadas}</div></div>
+    <div class="card"><div class="label">Cumplimiento general</div><div class="value gold">${cumplGeneral}</div></div>
+    <div class="card"><div class="label">Mayor carga</div><div class="value" style="font-size:16px;">${mayorCarga}</div></div>
+  `;
+  const parent = $(sel).parentElement;
+  const existing = parent.querySelector('.alert-banner-wrap');
+  if(existing) existing.remove();
+  if(banner || bannerVence){
+    const wrap = el(`<div class="alert-banner-wrap">${banner}${bannerVence}</div>`);
+    parent.insertBefore(wrap, $(sel));
+  }
+}
+
+function destroyChart(id){ if(STATE.charts[id]){ STATE.charts[id].destroy(); delete STATE.charts[id]; } }
+
+function renderCharts(idCarga, idEstado, idTendencia){
+  destroyChart(idCarga); destroyChart(idEstado); destroyChart(idTendencia);
+
+  const labels = STATE.talentos.map(t=>t.nombre);
+  const data = STATE.talentos.map(t=>tareasActivasDe(t.id).length);
+  STATE.charts[idCarga] = new Chart($('#'+idCarga), {
+    type:'bar',
+    data:{labels, datasets:[{label:'Tareas activas', data, backgroundColor:'#c9a45c'}]},
+    options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}},y:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}}}}
+  });
+
+  const estados = ['pendiente','en_progreso','en_revision','completada'];
+  const estadoLabels = ['Pendiente','En progreso','En revisión','Completada'];
+  const atrasadasCount = STATE.tareas.filter(isAtrasada).length;
+  const counts = estados.map(e=> STATE.tareas.filter(t=>t.estado===e && !isAtrasada(t)).length );
+  STATE.charts[idEstado] = new Chart($('#'+idEstado), {
+    type:'doughnut',
+    data:{labels:[...estadoLabels,'Atrasada'], datasets:[{data:[...counts, atrasadasCount], backgroundColor:['#6b6b6b','#d9a441','#8a7245','#6fae7a','#c05a52']}]},
+    options:{plugins:{legend:{position:'bottom', labels:{color:'#9a978f', boxWidth:10, font:{size:11}}}}}
+  });
+
+  // Tendencia: tareas completadas por semana (últimas 8 semanas) basado en updated_at
+  const weeks = [];
+  const now = new Date();
+  for(let i=7;i>=0;i--){
+    const d = new Date(now); d.setDate(d.getDate()-i*7);
+    weeks.push(d);
+  }
+  const weekLabels = weeks.map(d=>`${d.getDate()}/${d.getMonth()+1}`);
+  const weekCounts = weeks.map((d,i)=>{
+    const start = new Date(d); start.setDate(start.getDate()-7);
+    return STATE.tareas.filter(t=> t.estado==='completada' && new Date(t.updated_at) > start && new Date(t.updated_at) <= d).length;
+  });
+  STATE.charts[idTendencia] = new Chart($('#'+idTendencia), {
+    type:'line',
+    data:{labels:weekLabels, datasets:[{label:'Completadas', data:weekCounts, borderColor:'#c9a45c', backgroundColor:'rgba(201,164,92,.15)', fill:true, tension:.3}]},
+    options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#9a978f'},grid:{display:false}},y:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}}}}
+  });
+}
+
+function renderTalentosResumen(sel){
+  const cont = $(sel);
+  cont.innerHTML='';
+  if(STATE.talentos.length===0){ cont.innerHTML = `<div class="empty-state">No hay talentos registrados.</div>`; return; }
+  STATE.talentos.forEach(t=>{
+    const carga = nivelCarga(t.id);
+    const cumpl = cumplimientoDe(t.id);
+    cont.appendChild(el(`
+      <div class="list-row">
+        <div class="avatar">${t.avatar_inicial||initials(t.nombre)}</div>
+        <div class="flex-grow">
+          <div class="person-name">${t.nombre}</div>
+          <div class="person-role">${t.rol}</div>
+        </div>
+        <span class="pill dim">${t.estado}</span>
+        <span class="pill ${carga.cls}">${carga.label} (${carga.n})</span>
+        <span class="pill dim">Cumpl: ${cumpl===null?'—':cumpl+'%'}</span>
+      </div>`));
+  });
+}
+
+function renderKanban(sel, editable){
+  const cont = $(sel);
+  cont.innerHTML='';
+  ESTADOS_TAREA.forEach(col=>{
+    const items = STATE.tareas.filter(t=>t.estado===col.key);
+    const colEl = el(`<div class="kanban-col" data-estado="${col.key}"><h4>${col.label} <span>${items.length}</span></h4><div class="kcards"></div></div>`);
+    const kcards = $('.kcards', colEl);
+    items.forEach(t=>{
+      const card = el(`
+        <div class="kcard" draggable="${editable}" data-id="${t.id}">
+          <div class="t">${t.titulo}</div>
+          <div class="meta">
+            <span class="pill dim">${talentoNombre(t.talento_id)}</span>
+            ${pillPrioridad(t.prioridad)}
+            ${isAtrasada(t)?'<span class="pill danger">Atrasada</span>':pillVencimiento(t)}
+          </div>
+          <div class="meta"><span class="pill dim">${fmtDate(t.fecha_entrega)}</span></div>
+          ${editable?`<select class="reassign" data-id="${t.id}"><option value="">Reasignar a...</option>${STATE.talentos.map(tl=>`<option value="${tl.id}" ${tl.id===t.talento_id?'selected':''}>${tl.nombre}</option>`).join('')}</select>`:''}
+        </div>`);
+      if(editable){
+        card.addEventListener('dragstart', e=>{ card.classList.add('dragging'); e.dataTransfer.setData('text/plain', t.id); });
+        card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+        card.querySelector('.t').addEventListener('click', ()=> openTareaModal(t.id));
+        const sel = card.querySelector('.reassign');
+        sel.addEventListener('click', e=> e.stopPropagation());
+        sel.addEventListener('change', async e=>{
+          e.stopPropagation();
+          await supa.from('tareas').update({talento_id: sel.value || null, updated_at:new Date().toISOString()}).eq('id', t.id);
+          await loadAll(); renderAdminTab();
+          toast('Tarea reasignada');
+        });
+      }
+      kcards.appendChild(card);
+    });
+    if(editable){
+      colEl.addEventListener('dragover', e=>{ e.preventDefault(); colEl.classList.add('dragover'); });
+      colEl.addEventListener('dragleave', ()=> colEl.classList.remove('dragover'));
+      colEl.addEventListener('drop', async e=>{
+        e.preventDefault(); colEl.classList.remove('dragover');
+        const id = e.dataTransfer.getData('text/plain');
+        await supa.from('tareas').update({estado:col.key, updated_at:new Date().toISOString()}).eq('id', id);
+        await loadAll(); renderAdminTab();
+        toast('Tarea actualizada');
+      });
+    }
+    cont.appendChild(colEl);
+  });
+}
+
+/* ============================================================
+   CALENDARIO MENSUAL
+   ============================================================ */
+function renderCalendario(){
+  const view = $('#view-calendario');
+  const year = STATE.calFecha.getFullYear();
+  const month = STATE.calFecha.getMonth();
+  const nombreMes = STATE.calFecha.toLocaleDateString('es-CO',{month:'long', year:'numeric'});
+  const primerDia = new Date(year, month, 1).getDay();
+  const diasEnMes = new Date(year, month+1, 0).getDate();
+  const hoy = new Date();
+
+  let celdas = '';
+  for(let i=0;i<primerDia;i++) celdas += `<div class="cal-cell empty"></div>`;
+  for(let d=1; d<=diasEnMes; d++){
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const tareasDia = STATE.tareas.filter(t=>t.fecha_entrega===dateStr);
+    const esHoy = hoy.getFullYear()===year && hoy.getMonth()===month && hoy.getDate()===d;
+    celdas += `<div class="cal-cell ${esHoy?'today':''}" data-date="${dateStr}">
+      <div class="num">${d}</div>
+      ${tareasDia.length? `<div class="count">${tareasDia.length} tarea${tareasDia.length>1?'s':''}</div>`:''}
+    </div>`;
+  }
+
+  view.innerHTML = `
+    <div class="cal-header">
+      <button class="btn secondary small" id="cal-prev">‹ Anterior</button>
+      <h3>${nombreMes}</h3>
+      <button class="btn secondary small" id="cal-next">Siguiente ›</button>
+    </div>
+    <div class="cal-grid">
+      ${['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map(d=>`<div class="cal-daylabel">${d}</div>`).join('')}
+      ${celdas}
+    </div>
+    <div id="cal-detalle" style="margin-top:20px;"></div>
+  `;
+  $('#cal-prev').onclick = ()=>{ STATE.calFecha = new Date(year, month-1, 1); renderCalendario(); };
+  $('#cal-next').onclick = ()=>{ STATE.calFecha = new Date(year, month+1, 1); renderCalendario(); };
+  view.querySelectorAll('.cal-cell[data-date]').forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+      const date = cell.dataset.date;
+      const tareasDia = STATE.tareas.filter(t=>t.fecha_entrega===date);
+      const det = $('#cal-detalle');
+      if(tareasDia.length===0){ det.innerHTML = `<div class="empty-state">Sin tareas para ${fmtDate(date)}.</div>`; return; }
+      det.innerHTML = `<div class="section-title">Tareas del ${fmtDate(date)}</div>`;
+      tareasDia.forEach(t=>{
+        det.appendChild(el(`
+          <div class="list-row">
+            <div class="flex-grow">
+              <div class="person-name">${t.titulo}</div>
+              <div class="person-role">${talentoNombre(t.talento_id)} · ${proyectoNombre(t.proyecto_id)}</div>
+            </div>
+            ${pillEstadoTarea(t)}
+            <button class="btn secondary small" data-open="${t.id}">Ver</button>
+          </div>`));
+      });
+      det.querySelectorAll('[data-open]').forEach(b=> b.onclick = ()=> openTareaModal(b.dataset.open));
+    });
+  });
+}
+
+/* ============================================================
+   VISTA ADMINISTRADOR
+   ============================================================ */
+function renderAdminApp(){
+  $('#app').innerHTML = `
+    <div class="topbar">
+      <div class="brand"><span class="crown">♛</span><div><h1>LE COLLEZIONI</h1><div class="sub">Equipo Creativo · Admin</div></div></div>
+      <span class="mode-badge">Administrador</span>
+    </div>
+    <div class="tabs">
+      <div class="tab" data-tab="dashboard">Dashboard</div>
+      <div class="tab" data-tab="kanban">Tablero</div>
+      <div class="tab" data-tab="calendario">Calendario</div>
+      <div class="tab" data-tab="talentos">Talentos</div>
+      <div class="tab" data-tab="proyectos">Proyectos</div>
+      <div class="tab" data-tab="tareas">Tareas</div>
+      <div class="tab" data-tab="metas">Metas</div>
+      <div class="tab" data-tab="links">Links y respaldo</div>
+    </div>
+    <main>
+      <div class="view" id="view-dashboard"></div>
+      <div class="view" id="view-kanban"></div>
+      <div class="view" id="view-calendario"></div>
+      <div class="view" id="view-talentos"></div>
+      <div class="view" id="view-proyectos"></div>
+      <div class="view" id="view-tareas"></div>
+      <div class="view" id="view-metas"></div>
+      <div class="view" id="view-links"></div>
+    </main>`;
+  document.querySelectorAll('.tab').forEach(tab=>{
+    tab.onclick = ()=>{ STATE.activeTab = tab.dataset.tab; renderAdminTab(); };
+  });
+  STATE.activeTab='dashboard';
+  renderAdminTab();
+}
+
+function renderAdminTab(){
+  document.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===STATE.activeTab));
+  document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
+  const view = $('#view-'+STATE.activeTab);
+  if(view) view.classList.add('active');
+
+  if(STATE.activeTab==='dashboard') renderAdminDashboard();
+  if(STATE.activeTab==='kanban') renderAdminKanbanTab();
+  if(STATE.activeTab==='calendario') renderCalendario();
+  if(STATE.activeTab==='talentos') renderAdminTalentos();
+  if(STATE.activeTab==='proyectos') renderAdminProyectos();
+  if(STATE.activeTab==='tareas') renderAdminTareas();
+  if(STATE.activeTab==='metas') renderAdminMetas();
+  if(STATE.activeTab==='links') renderAdminLinks();
+}
+
+function renderAdminDashboard(){
+  $('#view-dashboard').innerHTML = `
+    <div class="grid-cards" id="ad-cards"></div>
+    <div class="charts-grid">
+      <div class="chart-box"><h3>Carga por persona</h3><canvas id="chart-carga-ad"></canvas></div>
+      <div class="chart-box"><h3>Distribución por estado</h3><canvas id="chart-estado-ad"></canvas></div>
+    </div>
+    <div class="chart-box" style="margin-bottom:24px;"><h3>Tendencia de tareas completadas</h3><canvas id="chart-tendencia-ad"></canvas></div>
+    <div class="section-title">Equipo</div>
+    <div id="ad-talentos"></div>`;
+  renderDashboardCards('#ad-cards');
+  renderCharts('chart-carga-ad','chart-estado-ad','chart-tendencia-ad');
+  renderTalentosResumen('#ad-talentos');
+}
+
+function renderAdminKanbanTab(){
+  $('#view-kanban').innerHTML = `<div class="section-title">Tablero <button class="btn small" id="btn-nueva-tarea-kanban">+ Nueva tarea</button></div><div class="kanban" id="ad-kanban"></div>`;
+  $('#btn-nueva-tarea-kanban').onclick = ()=> openTareaModal(null);
+  renderKanban('#ad-kanban', true);
+}
+
+/* ---------------- TALENTOS ---------------- */
+function renderAdminTalentos(){
+  $('#view-talentos').innerHTML = `<div class="section-title">Talentos <button class="btn small" id="btn-nuevo-talento">+ Nuevo talento</button></div><div id="lista-talentos"></div>`;
+  $('#btn-nuevo-talento').onclick = ()=> openTalentoModal(null);
+  const cont = $('#lista-talentos');
+  cont.innerHTML='';
+  if(STATE.talentos.length===0){ cont.innerHTML=`<div class="empty-state">No hay talentos aún.</div>`; return; }
+  STATE.talentos.forEach(t=>{
+    const carga = nivelCarga(t.id);
+    cont.appendChild(el(`
+      <div class="list-row">
+        <div class="avatar">${t.avatar_inicial||initials(t.nombre)}</div>
+        <div class="flex-grow">
+          <div class="person-name">${t.nombre}</div>
+          <div class="person-role">${t.rol}</div>
+        </div>
+        <span class="pill dim">${t.estado}</span>
+        <span class="pill ${carga.cls}">${carga.label} (${carga.n})</span>
+        ${t.acceso_habilitado===false?'<span class="pill danger">Acceso revocado</span>':''}
+        <div class="row-actions">
+          <button class="btn secondary small" data-edit="${t.id}">Editar</button>
+          <button class="btn danger small" data-del="${t.id}">Eliminar</button>
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=> openTalentoModal(b.dataset.edit));
+  cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('talentos', b.dataset.del, renderAdminTalentos));
+}
+
+function openTalentoModal(id){
+  const t = id ? STATE.talentos.find(x=>x.id===id) : null;
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${t?'Editar':'Nuevo'} talento</h3>
+        <div class="field"><label>Nombre</label><input id="f-nombre" value="${t?t.nombre:''}"></div>
+        <div class="field"><label>Rol</label><input id="f-rol" value="${t?t.rol:''}" placeholder="Diseño gráfico, fotografía, pauta..."></div>
+        <div class="field"><label>Estado</label>
+          <select id="f-estado">${ESTADOS_TALENTO.map(e=>`<option value="${e}" ${t&&t.estado===e?'selected':''}>${e}</option>`).join('')}</select>
+        </div>
+        ${t?`
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="f-acceso" ${t.acceso_habilitado!==false?'checked':''} style="width:auto;">
+            Acceso a su link de vista habilitado
+          </label>
+        </div>`:''}
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn" id="save">Guardar</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  $('#cancel', overlay).onclick = ()=> overlay.remove();
+  $('#save', overlay).onclick = async ()=>{
+    const nombre = $('#f-nombre', overlay).value.trim();
+    const rol = $('#f-rol', overlay).value.trim();
+    const estado = $('#f-estado', overlay).value;
+    if(!nombre || !rol){ toast('Nombre y rol son obligatorios'); return; }
+    const payload = { nombre, rol, estado, avatar_inicial: initials(nombre) };
+    if(t){
+      payload.acceso_habilitado = $('#f-acceso', overlay).checked;
+      await supa.from('talentos').update(payload).eq('id', t.id);
+      overlay.remove();
+      await loadAll(); renderAdminTalentos();
+      toast('Talento guardado');
+    } else {
+      const { data, error } = await supa.from('talentos').insert(payload).select();
+      overlay.remove();
+      await loadAll(); renderAdminTalentos();
+      if(!error && data && data[0]){
+        mostrarLinkGenerado(data[0]);
+      } else {
+        toast('Talento guardado');
+      }
+    }
+  };
+}
+
+function mostrarLinkGenerado(talento){
+  const base = location.origin + location.pathname;
+  const link = `${base}?aprendiz=${talento.id}`;
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${talento.nombre} — link de acceso listo</h3>
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">Comparte este link para que vea únicamente sus tareas (solo lectura):</p>
+        <div class="field"><input id="nuevo-link" value="${link}" readonly></div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="close-link">Cerrar</button>
+          <button class="btn" id="copy-nuevo-link">Copiar link</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  $('#close-link', overlay).onclick = ()=> overlay.remove();
+  $('#copy-nuevo-link', overlay).onclick = ()=>{ navigator.clipboard.writeText(link); toast('Link copiado'); overlay.remove(); };
+}
+
+/* ---------------- PROYECTOS ---------------- */
+function renderAdminProyectos(){
+  $('#view-proyectos').innerHTML = `<div class="section-title">Proyectos <button class="btn small" id="btn-nuevo-proyecto">+ Nuevo proyecto</button></div><div id="lista-proyectos"></div>`;
+  $('#btn-nuevo-proyecto').onclick = ()=> openProyectoModal(null);
+  const cont = $('#lista-proyectos');
+  cont.innerHTML='';
+  if(STATE.proyectos.length===0){ cont.innerHTML=`<div class="empty-state">No hay proyectos aún.</div>`; return; }
+  STATE.proyectos.forEach(p=>{
+    const nTareas = STATE.tareas.filter(t=>t.proyecto_id===p.id).length;
+    cont.appendChild(el(`
+      <div class="list-row">
+        <div class="flex-grow">
+          <div class="person-name">${p.nombre}</div>
+          <div class="person-role">${p.marca||'—'} · ${nTareas} tareas · Entrega: ${fmtDate(p.fecha_limite)}</div>
+        </div>
+        <span class="pill dim">${p.estado}</span>
+        <div class="row-actions">
+          <button class="btn secondary small" data-edit="${p.id}">Editar</button>
+          <button class="btn danger small" data-del="${p.id}">Eliminar</button>
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=> openProyectoModal(b.dataset.edit));
+  cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('proyectos', b.dataset.del, renderAdminProyectos));
+}
+
+function openProyectoModal(id){
+  const p = id ? STATE.proyectos.find(x=>x.id===id) : null;
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${p?'Editar':'Nuevo'} proyecto</h3>
+        <div class="field"><label>Nombre</label><input id="f-nombre" value="${p?p.nombre:''}"></div>
+        <div class="field"><label>Marca / cliente interno</label><input id="f-marca" value="${p?p.marca||'':''}"></div>
+        <div class="field"><label>Fecha inicio</label><input type="date" id="f-inicio" value="${p?p.fecha_inicio||'':''}"></div>
+        <div class="field"><label>Fecha límite</label><input type="date" id="f-limite" value="${p?p.fecha_limite||'':''}"></div>
+        <div class="field"><label>Estado</label>
+          <select id="f-estado">${ESTADOS_PROYECTO.map(e=>`<option value="${e}" ${p&&p.estado===e?'selected':''}>${e}</option>`).join('')}</select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn" id="save">Guardar</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  $('#cancel', overlay).onclick = ()=> overlay.remove();
+  $('#save', overlay).onclick = async ()=>{
+    const nombre = $('#f-nombre', overlay).value.trim();
+    if(!nombre){ toast('El nombre es obligatorio'); return; }
+    const payload = {
+      nombre,
+      marca: $('#f-marca', overlay).value.trim(),
+      fecha_inicio: $('#f-inicio', overlay).value || null,
+      fecha_limite: $('#f-limite', overlay).value || null,
+      estado: $('#f-estado', overlay).value
+    };
+    if(p) await supa.from('proyectos').update(payload).eq('id', p.id);
+    else await supa.from('proyectos').insert(payload);
+    overlay.remove();
+    await loadAll(); renderAdminProyectos();
+    toast('Proyecto guardado');
+  };
+}
+
+/* ---------------- TAREAS ---------------- */
+function tareasFiltradas(){
+  const f = STATE.filtroTareas;
+  return STATE.tareas.filter(t=>
+    (!f.talento || t.talento_id===f.talento) &&
+    (!f.proyecto || t.proyecto_id===f.proyecto) &&
+    (!f.prioridad || t.prioridad===f.prioridad) &&
+    (!f.estado || (f.estado==='atrasada' ? isAtrasada(t) : t.estado===f.estado)) &&
+    (!f.q || t.titulo.toLowerCase().includes(f.q.toLowerCase()) || (t.descripcion||'').toLowerCase().includes(f.q.toLowerCase()))
+  );
+}
+
+function renderAdminTareas(){
+  $('#view-tareas').innerHTML = `
+    <div class="section-title">Tareas <button class="btn small" id="btn-nueva-tarea">+ Nueva tarea</button></div>
+    <div class="filtros">
+      <input type="text" id="fil-q" placeholder="Buscar título o descripción..." value="${STATE.filtroTareas.q}">
+      <select id="fil-talento"><option value="">Todos los talentos</option>${STATE.talentos.map(t=>`<option value="${t.id}" ${STATE.filtroTareas.talento===t.id?'selected':''}>${t.nombre}</option>`).join('')}</select>
+      <select id="fil-proyecto"><option value="">Todos los proyectos</option>${STATE.proyectos.map(p=>`<option value="${p.id}" ${STATE.filtroTareas.proyecto===p.id?'selected':''}>${p.nombre}</option>`).join('')}</select>
+      <select id="fil-prioridad"><option value="">Toda prioridad</option>${PRIORIDADES.map(p=>`<option value="${p}" ${STATE.filtroTareas.prioridad===p?'selected':''}>${p}</option>`).join('')}</select>
+      <select id="fil-estado">
+        <option value="">Todo estado</option>
+        ${ESTADOS_TAREA.map(e=>`<option value="${e.key}" ${STATE.filtroTareas.estado===e.key?'selected':''}>${e.label}</option>`).join('')}
+        <option value="atrasada" ${STATE.filtroTareas.estado==='atrasada'?'selected':''}>Atrasada</option>
+      </select>
+      <button class="btn secondary small" id="fil-limpiar">Limpiar</button>
+    </div>
+    <div id="lista-tareas"></div>`;
+  $('#btn-nueva-tarea').onclick = ()=> openTareaModal(null);
+  $('#fil-q').oninput = e=>{ STATE.filtroTareas.q = e.target.value; renderListaTareas(); };
+  $('#fil-talento').onchange = e=>{ STATE.filtroTareas.talento = e.target.value; renderListaTareas(); };
+  $('#fil-proyecto').onchange = e=>{ STATE.filtroTareas.proyecto = e.target.value; renderListaTareas(); };
+  $('#fil-prioridad').onchange = e=>{ STATE.filtroTareas.prioridad = e.target.value; renderListaTareas(); };
+  $('#fil-estado').onchange = e=>{ STATE.filtroTareas.estado = e.target.value; renderListaTareas(); };
+  $('#fil-limpiar').onclick = ()=>{ STATE.filtroTareas = {talento:'', proyecto:'', prioridad:'', estado:'', q:''}; renderAdminTareas(); };
+  renderListaTareas();
+}
+
+function renderListaTareas(){
+  const cont = $('#lista-tareas');
+  cont.innerHTML='';
+  const lista = tareasFiltradas();
+  if(lista.length===0){ cont.innerHTML=`<div class="empty-state">No hay tareas que coincidan.</div>`; return; }
+  lista.forEach(t=>{
+    cont.appendChild(el(`
+      <div class="list-row" style="align-items:flex-start;">
+        <div class="flex-grow">
+          <div class="person-name">${t.titulo}</div>
+          <div class="person-role">${proyectoNombre(t.proyecto_id)} · ${talentoNombre(t.talento_id)} · Entrega: ${fmtDate(t.fecha_entrega)}</div>
+          <div class="meta" style="margin-top:6px;">${pillEstadoTarea(t)} ${pillVencimiento(t)} ${pillPrioridad(t.prioridad)}
+          ${t.link_archivo?`<a href="${t.link_archivo}" target="_blank" class="pill ok">Ver archivo</a>`:''}
+          ${avancesDe(t.id).length?`<span class="pill dim">${avancesDe(t.id).length} avance(s)</span>`:''}</div>
+        </div>
+        <div class="row-actions">
+          <button class="btn secondary small" data-edit="${t.id}">Editar</button>
+          <button class="btn danger small" data-del="${t.id}">Eliminar</button>
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=> openTareaModal(b.dataset.edit));
+  cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('tareas', b.dataset.del, renderAdminTareas));
+}
+
+function renderAvancesModal(overlay, tareaId){
+  const cont = $('#avances-list', overlay);
+  if(!cont) return;
+  const avances = avancesDe(tareaId);
+  cont.innerHTML = avances.length? '' : `<div class="empty-state" style="padding:8px;">Sin avances registrados.</div>`;
+  avances.forEach(a=>{
+    cont.appendChild(el(`
+      <div class="avance-item">
+        ${a.descripcion}
+        <div class="meta-line">${a.autor||'Administrador'} · ${fmtDate(a.created_at.slice(0,10))}
+        ${a.archivo_url?` · <a href="${a.archivo_url}" target="_blank">Ver archivo</a>`:''}</div>
+      </div>`));
+  });
+}
+
+function openTareaModal(id){
+  const t = id ? STATE.tareas.find(x=>x.id===id) : null;
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${t?'Editar':'Nueva'} tarea</h3>
+        <div class="field"><label>Título</label><input id="f-titulo" value="${t?t.titulo:''}"></div>
+        <div class="field"><label>Descripción</label><textarea id="f-desc">${t?t.descripcion||'':''}</textarea></div>
+        <div class="field"><label>Proyecto</label>
+          <select id="f-proyecto"><option value="">— Sin proyecto —</option>${STATE.proyectos.map(p=>`<option value="${p.id}" ${t&&t.proyecto_id===p.id?'selected':''}>${p.nombre}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Tipo</label><input id="f-tipo" value="${t?t.tipo||'':''}" placeholder="Diseño, fotografía, video, copy, pauta..."></div>
+        <div class="field"><label>Talento asignado</label>
+          <select id="f-talento"><option value="">— Sin asignar —</option>${STATE.talentos.map(p=>`<option value="${p.id}" ${t&&t.talento_id===p.id?'selected':''}>${p.nombre}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Fecha de entrega</label><input type="date" id="f-fecha" value="${t?t.fecha_entrega||'':''}"></div>
+        <div class="field"><label>Prioridad</label>
+          <select id="f-prioridad">${PRIORIDADES.map(p=>`<option value="${p}" ${t&&t.prioridad===p?'selected':''}>${p}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Estado</label>
+          <select id="f-estado">${ESTADOS_TAREA.map(e=>`<option value="${e.key}" ${t&&t.estado===e.key?'selected':''}>${e.label}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Link del archivo final (al completar)</label><input id="f-link" value="${t?t.link_archivo||'':''}" placeholder="https://..."></div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn" id="save">Guardar</button>
+        </div>
+        ${t?`
+        <div class="avance-form">
+          <label style="display:block;font-size:12px;color:var(--text-dim);margin-bottom:8px;">Avances y archivos</label>
+          <div id="avances-list"></div>
+          <div class="field" style="margin-top:10px;"><textarea id="f-avance-desc" placeholder="Describe el avance..."></textarea></div>
+          <div class="field"><input type="file" id="f-avance-file"></div>
+          <button class="btn secondary small" id="btn-add-avance">+ Agregar avance</button>
+          <div id="avance-progress" style="font-size:11px;color:var(--text-dim);margin-top:6px;"></div>
+        </div>`:''}
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  if(t) renderAvancesModal(overlay, t.id);
+  $('#cancel', overlay).onclick = ()=> overlay.remove();
+  $('#save', overlay).onclick = async ()=>{
+    const titulo = $('#f-titulo', overlay).value.trim();
+    if(!titulo){ toast('El título es obligatorio'); return; }
+    const payload = {
+      titulo,
+      descripcion: $('#f-desc', overlay).value.trim(),
+      proyecto_id: $('#f-proyecto', overlay).value || null,
+      tipo: $('#f-tipo', overlay).value.trim(),
+      talento_id: $('#f-talento', overlay).value || null,
+      fecha_entrega: $('#f-fecha', overlay).value || null,
+      prioridad: $('#f-prioridad', overlay).value,
+      estado: $('#f-estado', overlay).value,
+      link_archivo: $('#f-link', overlay).value.trim(),
+      updated_at: new Date().toISOString()
+    };
+    if(t) await supa.from('tareas').update(payload).eq('id', t.id);
+    else await supa.from('tareas').insert(payload);
+    overlay.remove();
+    await loadAll(); renderAdminTab();
+    toast('Tarea guardada');
+  };
+  if(t){
+    $('#btn-add-avance', overlay).onclick = async ()=>{
+      const desc = $('#f-avance-desc', overlay).value.trim();
+      if(!desc){ toast('Escribe una descripción del avance'); return; }
+      const fileInput = $('#f-avance-file', overlay);
+      const file = fileInput.files[0];
+      const progressEl = $('#avance-progress', overlay);
+      let archivo_url = null, archivo_nombre = null;
+      try{
+        if(file){
+          progressEl.textContent = 'Subiendo archivo...';
+          const path = `${t.id}/${Date.now()}_${file.name}`;
+          const { error: upErr } = await supa.storage.from(BUCKET_ARCHIVOS).upload(path, file);
+          if(upErr) throw upErr;
+          const { data: pub } = supa.storage.from(BUCKET_ARCHIVOS).getPublicUrl(path);
+          archivo_url = pub.publicUrl;
+          archivo_nombre = file.name;
+        }
+        await supa.from('avances').insert({
+          tarea_id: t.id, descripcion: desc, autor: 'Administrador',
+          archivo_url, archivo_nombre
+        });
+        await loadAll();
+        $('#f-avance-desc', overlay).value = '';
+        fileInput.value = '';
+        progressEl.textContent = '';
+        renderAvancesModal(overlay, t.id);
+        toast('Avance agregado');
+      }catch(err){
+        progressEl.textContent = 'Error al subir. Verifica que creaste el bucket "archivos" en Supabase (ver migración v2).';
+      }
+    };
+  }
+}
+
+/* ---------------- METAS ---------------- */
+function renderAdminMetas(){
+  $('#view-metas').innerHTML = `
+    <div class="section-title">Metas <button class="btn small" id="btn-nueva-meta">+ Nueva meta</button></div>
+    <div id="metas-chart-wrap"></div>
+    <div id="lista-metas"></div>`;
+  $('#btn-nueva-meta').onclick = ()=> openMetaModal(null);
+  renderMetasTrendChart();
+  const cont = $('#lista-metas');
+  cont.innerHTML='';
+  if(STATE.metas.length===0){ cont.innerHTML=`<div class="empty-state">No hay metas configuradas.</div>`; return; }
+  STATE.metas.forEach(m=>{
+    let real = null;
+    if(m.talento_id) real = cumplimientoDe(m.talento_id);
+    const pct = real===null? 0 : real;
+    cont.appendChild(el(`
+      <div class="list-row" style="align-items:flex-start;">
+        <div class="flex-grow">
+          <div class="person-name">${m.descripcion}</div>
+          <div class="person-role">${m.talento_id?talentoNombre(m.talento_id):(m.proyecto_id?proyectoNombre(m.proyecto_id):'General')} · Periodo: ${m.periodo||'—'} · Meta: ${m.meta_porcentaje}%</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(pct,100)}%"></div></div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Real: ${real===null?'sin datos':pct+'%'}</div>
+        </div>
+        <div class="row-actions">
+          <button class="btn danger small" data-del="${m.id}">Eliminar</button>
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('metas', b.dataset.del, renderAdminMetas));
+}
+
+function renderMetasTrendChart(){
+  const wrap = $('#metas-chart-wrap');
+  if(!wrap) return;
+  const periodos = [...new Set(STATE.metas.map(m=>m.periodo).filter(Boolean))].sort();
+  if(periodos.length===0){ wrap.innerHTML=''; return; }
+  wrap.innerHTML = `<div class="chart-box" style="margin-bottom:20px;"><h3>Meta vs. real por periodo</h3><canvas id="chart-metas-trend"></canvas></div>`;
+  const metaProm = periodos.map(per=>{
+    const ms = STATE.metas.filter(m=>m.periodo===per);
+    return Math.round(ms.reduce((s,m)=>s+Number(m.meta_porcentaje||0),0)/ms.length);
+  });
+  const realProm = periodos.map(per=>{
+    const ms = STATE.metas.filter(m=>m.periodo===per && m.talento_id);
+    const reales = ms.map(m=>cumplimientoDe(m.talento_id)).filter(v=>v!==null);
+    return reales.length? Math.round(reales.reduce((s,v)=>s+v,0)/reales.length) : 0;
+  });
+  destroyChart('chart-metas-trend');
+  STATE.charts['chart-metas-trend'] = new Chart($('#chart-metas-trend'), {
+    type:'bar',
+    data:{labels:periodos, datasets:[
+      {label:'Meta', data:metaProm, backgroundColor:'#8a7245'},
+      {label:'Real', data:realProm, backgroundColor:'#c9a45c'}
+    ]},
+    options:{plugins:{legend:{labels:{color:'#9a978f'}}}, scales:{x:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}},y:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}}}}
+  });
+}
+
+function generarReporteMensual(){
+  const now = new Date();
+  const mesNombre = now.toLocaleDateString('es-CO',{month:'long', year:'numeric'});
+  const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1);
+  const filasTalento = STATE.talentos.map(t=>{
+    const completadasMes = STATE.tareas.filter(x=>x.talento_id===t.id && x.estado==='completada' && new Date(x.updated_at)>=inicioMes);
+    const cumpl = cumplimientoDe(t.id);
+    const atrasadas = tareasAtrasadasDe(t.id);
+    return `<tr>
+      <td>${t.nombre}</td><td>${t.rol}</td>
+      <td>${completadasMes.length}</td>
+      <td>${atrasadas}</td>
+      <td>${cumpl===null?'—':cumpl+'%'}</td>
+    </tr>`;
+  }).join('');
+  const html = `
+    <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Reporte mensual — LE COLLEZIONI</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:40px;color:#111;}
+      h1{font-size:20px;margin-bottom:4px;}
+      .sub{color:#666;font-size:13px;margin-bottom:24px;text-transform:capitalize;}
+      table{width:100%;border-collapse:collapse;margin-top:10px;}
+      th,td{border:1px solid #ddd;padding:8px 10px;font-size:13px;text-align:left;}
+      th{background:#f5f5f5;}
+      @media print{ .no-print{display:none;} }
+    </style></head><body>
+    <h1>LE COLLEZIONI · Reporte mensual del equipo creativo</h1>
+    <div class="sub">${mesNombre}</div>
+    <table>
+      <thead><tr><th>Talento</th><th>Rol</th><th>Completadas este mes</th><th>Atrasadas actuales</th><th>Cumplimiento histórico</th></tr></thead>
+      <tbody>${filasTalento}</tbody>
+    </table>
+    <p class="no-print" style="margin-top:24px;color:#666;font-size:12px;">Usa Ctrl+P (o Cmd+P) para guardar esta página como PDF.</p>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+function openMetaModal(){
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>Nueva meta</h3>
+        <div class="field"><label>Descripción</label><input id="f-desc" placeholder="Entregar 90% a tiempo este mes"></div>
+        <div class="field"><label>Aplica a talento</label>
+          <select id="f-talento"><option value="">— No aplica —</option>${STATE.talentos.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Aplica a proyecto</label>
+          <select id="f-proyecto"><option value="">— No aplica —</option>${STATE.proyectos.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Meta (%)</label><input type="number" id="f-pct" value="90" min="0" max="100"></div>
+        <div class="field"><label>Periodo (ej. 2026-08)</label><input id="f-periodo" placeholder="2026-08"></div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn" id="save">Guardar</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  $('#cancel', overlay).onclick = ()=> overlay.remove();
+  $('#save', overlay).onclick = async ()=>{
+    const descripcion = $('#f-desc', overlay).value.trim();
+    if(!descripcion){ toast('La descripción es obligatoria'); return; }
+    const payload = {
+      descripcion,
+      talento_id: $('#f-talento', overlay).value || null,
+      proyecto_id: $('#f-proyecto', overlay).value || null,
+      meta_porcentaje: Number($('#f-pct', overlay).value) || 90,
+      periodo: $('#f-periodo', overlay).value.trim()
+    };
+    await supa.from('metas').insert(payload);
+    overlay.remove();
+    await loadAll(); renderAdminMetas();
+    toast('Meta guardada');
+  };
+}
+
+/* ---------------- BORRADO GENÉRICO ---------------- */
+async function deleteRow(table, id, refreshFn){
+  if(!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
+  await supa.from(table).delete().eq('id', id);
+  await loadAll();
+  refreshFn();
+  toast('Eliminado');
+}
+
+/* ---------------- LINKS Y RESPALDO ---------------- */
+function renderAdminLinks(){
+  const base = location.origin + location.pathname;
+  const view = $('#view-links');
+  view.innerHTML = `
+    <div class="section-title">Link de dirección (jefe)</div>
+    <div class="list-row"><div class="flex-grow"><code style="font-size:12px;">${base}?vista=jefe</code></div>
+      <button class="btn small" id="copy-jefe">Copiar</button></div>
+
+    <div class="section-title">Links por aprendiz</div>
+    <div id="links-aprendices"></div>
+
+    <div class="section-title">Reporte</div>
+    <button class="btn secondary" id="btn-reporte">Generar reporte mensual (imprimible / PDF)</button>
+
+    <div class="section-title">Respaldo</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn secondary" id="btn-export">Exportar JSON</button>
+      <label class="btn secondary" style="cursor:pointer;">Importar JSON<input type="file" id="file-import" accept=".json" class="hidden"></label>
+    </div>
+  `;
+  $('#copy-jefe').onclick = ()=>{ navigator.clipboard.writeText(base+'?vista=jefe'); toast('Link copiado'); };
+  $('#btn-reporte').onclick = generarReporteMensual;
+  const cont = $('#links-aprendices');
+  if(STATE.talentos.length===0){ cont.innerHTML = `<div class="empty-state">Crea talentos primero para generar sus links.</div>`; }
+  STATE.talentos.forEach(t=>{
+    const link = `${base}?aprendiz=${t.id}`;
+    cont.appendChild(el(`
+      <div class="list-row">
+        <div class="avatar">${t.avatar_inicial||initials(t.nombre)}</div>
+        <div class="flex-grow"><div class="person-name">${t.nombre}</div><code style="font-size:11px;color:var(--text-dim);word-break:break-all;">${link}</code></div>
+        <button class="btn small copy-link" data-link="${link}">Copiar</button>
+      </div>`));
+  });
+  cont.querySelectorAll('.copy-link').forEach(b=> b.onclick = ()=>{ navigator.clipboard.writeText(b.dataset.link); toast('Link copiado'); });
+
+  $('#btn-export').onclick = ()=>{
+    const data = { talentos: STATE.talentos, proyectos: STATE.proyectos, tareas: STATE.tareas, metas: STATE.metas, exportado: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `equipo-creativo-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  };
+  $('#file-import').onchange = async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const text = await file.text();
+    try{
+      const data = JSON.parse(text);
+      if(!confirm('Esto agregará los registros del archivo a la base de datos actual (no borra lo existente). ¿Continuar?')) return;
+      if(data.talentos) for(const t of data.talentos){ const {id,...rest}=t; await supa.from('talentos').insert(rest); }
+      if(data.proyectos) for(const p of data.proyectos){ const {id,...rest}=p; await supa.from('proyectos').insert(rest); }
+      // nota: tareas y metas dependen de ids nuevos, por eso solo se recomienda para proyectos/talentos en importaciones cruzadas
+      await loadAll();
+      renderAdminLinks();
+      toast('Importación completada (talentos y proyectos)');
+    }catch(err){ toast('Archivo inválido'); }
+  };
+}
+
+boot();
+</script>
+</body>
+</html>
