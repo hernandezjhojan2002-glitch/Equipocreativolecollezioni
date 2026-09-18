@@ -1,0 +1,1823 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LE COLLEZIONI · Equipo Creativo</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0f0f10;
+  --panel:#17171a;
+  --panel-2:#1e1e22;
+  --border:#2a2a2f;
+  --text:#eae7e1;
+  --text-dim:#9a978f;
+  --gold:#c9a45c;
+  --gold-dim:#8a7245;
+  --ok:#6fae7a;
+  --warn:#d9a441;
+  --danger:#c05a52;
+  --radius:10px;
+}
+:root[data-theme="light"]{
+  --bg:#f6f5f1;
+  --panel:#ffffff;
+  --panel-2:#f0efe8;
+  --border:#e0ddd2;
+  --text:#1a1a1a;
+  --text-dim:#6b675e;
+  --gold:#a97f34;
+  --gold-dim:#8a7245;
+  --ok:#3f7a4c;
+  --warn:#a9761f;
+  --danger:#a3382f;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Helvetica Neue',Arial,sans-serif;
+  min-height:100vh;
+  transition:background .2s,color .2s;
+}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+
+a{color:var(--gold);}
+.hidden{display:none !important;}
+
+/* ---------- LOGO / TEMA ---------- */
+.brand-logo-dark{display:block;}
+.brand-logo-light{display:none;}
+:root[data-theme="light"] .brand-logo-dark{display:none;}
+:root[data-theme="light"] .brand-logo-light{display:block;}
+.theme-toggle{
+  background:transparent;border:1px solid var(--border);border-radius:20px;
+  width:36px;height:36px;cursor:pointer;color:var(--text-dim);font-size:15px;
+  display:flex;align-items:center;justify-content:center;
+}
+.theme-toggle:hover{border-color:var(--gold-dim);color:var(--gold);}
+.theme-toggle .icon-sun{display:none;}
+.theme-toggle .icon-moon{display:inline;}
+:root[data-theme="light"] .theme-toggle .icon-sun{display:inline;}
+:root[data-theme="light"] .theme-toggle .icon-moon{display:none;}
+.topbar-actions{display:flex;align-items:center;gap:10px;}
+
+/* ---------- LAYOUT ---------- */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 28px;border-bottom:1px solid var(--border);
+  background:var(--panel);position:sticky;top:0;z-index:50;
+}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand .sub{font-size:11px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;}
+.mode-badge{
+  font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid var(--gold-dim);
+  color:var(--gold);letter-spacing:.5px;text-transform:uppercase;
+}
+.tabs{display:flex;gap:4px;padding:0 28px;border-bottom:1px solid var(--border);background:var(--panel);overflow-x:auto;}
+.tab{
+  padding:12px 16px;font-size:13px;color:var(--text-dim);cursor:pointer;
+  border-bottom:2px solid transparent;white-space:nowrap;
+}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+.tab:hover{color:var(--text);}
+main{padding:24px 28px 60px;max-width:1400px;margin:0 auto;}
+.view{display:none;}
+.view.active{display:block;}
+
+/* ---------- CARDS / GRID ---------- */
+.grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;}
+.card .label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-dim);margin-bottom:8px;}
+.card .value{font-size:28px;font-weight:600;}
+.card .value.gold{color:var(--gold);}
+.card .value.danger{color:var(--danger);}
+.card .sub{font-size:12px;color:var(--text-dim);margin-top:4px;}
+
+.section-title{font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin:28px 0 14px;display:flex;align-items:center;justify-content:space-between;}
+
+.charts-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin-bottom:24px;}
+.chart-box{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+.chart-box h3{font-size:13px;font-weight:500;color:var(--text-dim);margin-bottom:12px;}
+.chart-box canvas{max-height:220px;}
+@media(max-width:900px){.charts-grid{grid-template-columns:1fr;}}
+
+/* ---------- BUTTONS ---------- */
+.btn{
+  background:var(--gold);color:#141414;border:none;padding:9px 16px;border-radius:6px;
+  font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.3px;
+}
+.btn:hover{background:#d9b86e;}
+.btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn.secondary:hover{border-color:var(--gold-dim);}
+.btn.danger{background:transparent;border:1px solid var(--danger);color:var(--danger);}
+.btn.small{padding:5px 10px;font-size:12px;}
+
+/* ---------- TABLE / LISTS ---------- */
+.list-row{
+  display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--panel);
+  border:1px solid var(--border);border-radius:8px;margin-bottom:8px;
+}
+.avatar{
+  width:36px;height:36px;border-radius:50%;background:var(--panel-2);border:1px solid var(--gold-dim);
+  display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--gold);flex-shrink:0;
+}
+.pill{font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid var(--border);white-space:nowrap;}
+.pill.ok{color:var(--ok);border-color:var(--ok);}
+.pill.warn{color:var(--warn);border-color:var(--warn);}
+.pill.danger{color:var(--danger);border-color:var(--danger);}
+.pill.dim{color:var(--text-dim);}
+
+.progress-bar{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden;margin-top:6px;}
+.progress-fill{height:100%;background:var(--gold);}
+
+/* ---------- KANBAN ---------- */
+.kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+@media(max-width:900px){.kanban{grid-template-columns:1fr;}}
+.kanban-col{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:200px;}
+.kanban-col h4{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);margin-bottom:10px;display:flex;justify-content:space-between;}
+.kcard{
+  background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;
+  font-size:13px;cursor:grab;
+}
+.kcard.dragging{opacity:.4;}
+.kcard .t{font-weight:600;margin-bottom:4px;}
+.kcard .meta{font-size:11px;color:var(--text-dim);display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.kanban-col.dragover{border-color:var(--gold);}
+
+/* ---------- FORMS / MODAL ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;
+  z-index:200;padding:20px;
+}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;}
+.modal h3{margin-bottom:16px;font-size:16px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:5px;}
+.field input,.field select,.field textarea{
+  width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;
+  padding:9px 11px;color:var(--text);font-size:13px;font-family:inherit;
+}
+.field textarea{resize:vertical;min-height:60px;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;}
+
+/* ---------- GATE (login / no access) ---------- */
+.gate{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;text-align:center;padding:20px;
+}
+.gate .crown-big{display:flex;justify-content:center;margin-bottom:6px;}
+.gate input{
+  background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;color:var(--text);
+  font-size:14px;width:260px;text-align:center;
+}
+.gate p{color:var(--text-dim);font-size:13px;max-width:360px;}
+
+.readonly-badge{
+  display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);
+  border:1px solid var(--border);padding:4px 10px;border-radius:20px;margin-bottom:16px;
+}
+
+.toast{
+  position:fixed;bottom:20px;right:20px;background:var(--panel-2);border:1px solid var(--gold-dim);
+  color:var(--text);padding:12px 18px;border-radius:8px;font-size:13px;z-index:300;
+}
+
+.empty-state{color:var(--text-dim);font-size:13px;padding:20px;text-align:center;}
+
+.row-actions{display:flex;gap:6px;margin-left:auto;flex-shrink:0;}
+.flex-grow{flex:1;min-width:0;}
+.person-name{font-weight:600;font-size:14px;}
+.person-role{font-size:12px;color:var(--text-dim);}
+
+/* ---------- FILTROS ---------- */
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+.filtros select,.filtros input{
+  background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--text);
+  font-size:12px;padding:7px 10px;font-family:inherit;
+}
+.filtros input[type="text"]{min-width:160px;}
+
+/* ---------- BANNER ALERTA ---------- */
+.alert-banner{
+  background:rgba(192,90,82,.12);border:1px solid var(--danger);color:var(--danger);
+  border-radius:8px;padding:12px 16px;font-size:13px;margin-bottom:18px;
+}
+
+/* ---------- AVANCES ---------- */
+.avance-item{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;font-size:12px;}
+.avance-item .meta-line{color:var(--text-dim);font-size:11px;margin-top:4px;}
+.avance-form{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);}
+
+/* ---------- KANBAN reasignación rápida ---------- */
+.kcard select.reassign{
+  width:100%;margin-top:6px;font-size:11px;padding:4px 6px;background:var(--panel);
+  border:1px solid var(--border);border-radius:4px;color:var(--text);
+}
+
+/* ---------- CALENDARIO ---------- */
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.cal-header h3{font-size:15px;font-weight:600;text-transform:capitalize;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.cal-daylabel{font-size:11px;color:var(--text-dim);text-align:center;padding-bottom:4px;text-transform:uppercase;}
+.cal-cell{
+  background:var(--panel);border:1px solid var(--border);border-radius:8px;min-height:70px;padding:6px;
+  font-size:11px;cursor:pointer;
+}
+.cal-cell.empty{background:transparent;border:none;cursor:default;}
+.cal-cell.today{border-color:var(--gold);}
+.cal-cell .num{color:var(--text-dim);font-size:11px;margin-bottom:4px;}
+.cal-cell .count{color:var(--gold);font-weight:600;font-size:12px;}
+.cal-cell:hover{border-color:var(--gold-dim);}
+@media(max-width:700px){.cal-grid{gap:3px;} .cal-cell{min-height:44px;padding:4px;font-size:10px;}}
+
+/* ---------- MOBILE ---------- */
+@media(max-width:640px){
+  .topbar{padding:14px 16px;flex-wrap:wrap;gap:8px;}
+  main{padding:16px 14px 50px;}
+  .tabs{padding:0 14px;}
+  .tab{padding:10px 12px;font-size:12px;}
+  .modal{padding:18px;}
+  .list-row{flex-wrap:wrap;}
+  .row-actions{width:100%;justify-content:flex-end;margin-left:0;}
+  .grid-cards{grid-template-columns:repeat(2,1fr);}
+}
+
+/* ---------- SOLICITUDES (formulario público) ---------- */
+.solicitud-wrap{max-width:560px;margin:0 auto;padding:40px 20px;}
+.solicitud-wrap .field label{color:var(--text-dim);}
+.solicitud-success{text-align:center;padding:60px 20px;}
+.solicitud-success .check{font-size:40px;color:var(--ok);margin-bottom:14px;}
+.link-item-row{display:flex;align-items:center;gap:10px;}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const SUPABASE_URL = "https://yfppwtnrvkzlfigyvpgr.supabase.co";
+const SUPABASE_KEY = "sb_publishable_7fruHz3lVitB6i1j5uA8bA_QR9NdCp1";
+const BUCKET_ARCHIVOS = "archivos";
+const UMBRAL_SOBRECARGA = 5; // tareas activas para considerarse "sobrecargado"
+const UMBRAL_OPTIMO = 2;     // tareas activas mínimas para "óptimo" (menos = "bajo")
+const DIAS_ALERTA_VENCIMIENTO = 3; // avisar cuando falten X días o menos
+
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ============================================================
+   LOGO Y TEMA CLARO/OSCURO
+   ============================================================ */
+const LOGO_DARK = "data:image/png;base64,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";  // logo negro, se usa en tema claro
+const LOGO_LIGHT = "data:image/png;base64,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"; // logo blanco, se usa en tema oscuro
+function logoHTML(heightPx){
+  const h = heightPx || 28;
+  return `<img class="brand-logo-dark" src="${LOGO_LIGHT}" alt="LE COLLEZIONI" style="height:${h}px;width:auto;">`
+       + `<img class="brand-logo-light" src="${LOGO_DARK}" alt="LE COLLEZIONI" style="height:${h}px;width:auto;">`;
+}
+function getTheme(){ return localStorage.getItem('equipo_theme') || 'dark'; }
+function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); }
+function toggleTheme(){
+  const nuevo = getTheme()==='light' ? 'dark' : 'light';
+  localStorage.setItem('equipo_theme', nuevo);
+  applyTheme(nuevo);
+}
+function themeToggleHTML(){
+  return `<button class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" aria-label="Cambiar tema claro/oscuro">
+    <span class="icon-moon">🌙</span><span class="icon-sun">☀️</span>
+  </button>`;
+}
+applyTheme(getTheme());
+
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+const ESTADOS_TAREA = [
+  {key:'pendiente', label:'Pendiente'},
+  {key:'en_progreso', label:'En progreso'},
+  {key:'en_revision', label:'En revisión'},
+  {key:'completada', label:'Completada'}
+];
+const PRIORIDADES = ['baja','media','alta','urgente'];
+const ESTADOS_PROYECTO = ['planeacion','en_curso','en_revision','completado','pausado'];
+const ESTADOS_TALENTO = ['activo','onboarding','inactivo'];
+
+let STATE = {
+  mode: null, // 'admin' | 'aprendiz' | 'jefe' | 'solicitar' | null
+  talentoId: null, // for aprendiz mode
+  talentos: [], proyectos: [], tareas: [], metas: [], avances: [], solicitudes: [],
+  activeTab: 'dashboard',
+  charts: {},
+  filtroTareas: {talento:'', proyecto:'', prioridad:'', estado:'', q:''},
+  calFecha: new Date()
+};
+
+/* ============================================================
+   UTILS
+   ============================================================ */
+function $(sel,ctx=document){return ctx.querySelector(sel);}
+function el(html){const d=document.createElement('div');d.innerHTML=html.trim();return d.firstElementChild;}
+function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}); }
+function isAtrasada(t){
+  if(t.estado==='completada') return false;
+  if(!t.fecha_entrega) return false;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fe = new Date(t.fecha_entrega+'T00:00:00');
+  return fe < hoy;
+}
+function toast(msg){
+  const t = el(`<div class="toast">${msg}</div>`);
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2800);
+}
+function talentoNombre(id){ const t = STATE.talentos.find(x=>x.id===id); return t? t.nombre : '—'; }
+function proyectoNombre(id){ const p = STATE.proyectos.find(x=>x.id===id); return p? p.nombre : '—'; }
+function initials(name){ return (name||'?').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+function pillPrioridad(p){
+  const map = {baja:'dim', media:'dim', alta:'warn', urgente:'danger'};
+  return `<span class="pill ${map[p]||'dim'}">${p}</span>`;
+}
+function pillEstadoTarea(t){
+  if(isAtrasada(t)) return `<span class="pill danger">Atrasada</span>`;
+  const map = {pendiente:'dim', en_progreso:'warn', en_revision:'warn', completada:'ok', bloqueada:'danger'};
+  const labels = {pendiente:'Pendiente', en_progreso:'En progreso', en_revision:'En revisión', completada:'Completada', bloqueada:'Bloqueada'};
+  return `<span class="pill ${map[t.estado]||'dim'}">${labels[t.estado]||t.estado}</span>`;
+}
+function diasParaVencer(t){
+  if(!t.fecha_entrega) return null;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fe = new Date(t.fecha_entrega+'T00:00:00');
+  return Math.round((fe-hoy)/86400000);
+}
+function pillVencimiento(t){
+  if(t.estado==='completada' || isAtrasada(t)) return '';
+  const d = diasParaVencer(t);
+  if(d===null || d>DIAS_ALERTA_VENCIMIENTO) return '';
+  const label = d===0? 'Vence hoy' : d===1? 'Vence mañana' : `Vence en ${d}d`;
+  return `<span class="pill warn">${label}</span>`;
+}
+function avancesDe(tareaId){
+  return STATE.avances.filter(a=>a.tarea_id===tareaId).sort((a,b)=> new Date(b.created_at)-new Date(a.created_at));
+}
+const LABELS_ESTADO = {pendiente:'Pendiente', en_progreso:'En progreso', en_revision:'En revisión', completada:'Completada', bloqueada:'Bloqueada'};
+async function registrarCambioEstado(tareaId, estadoAnterior, estadoNuevo, autor){
+  if(estadoAnterior===estadoNuevo) return;
+  await supa.from('avances').insert({
+    tarea_id: tareaId,
+    descripcion: `Estado cambiado: ${LABELS_ESTADO[estadoAnterior]||estadoAnterior} → ${LABELS_ESTADO[estadoNuevo]||estadoNuevo}`,
+    autor: autor || 'Sistema'
+  });
+}
+function tiempoPromedioEntrega(talentoId){
+  const finalizadas = STATE.tareas.filter(t=>t.talento_id===talentoId && t.estado==='completada' && t.fecha_entrega);
+  if(finalizadas.length===0) return null;
+  const diffs = finalizadas.map(t=>{
+    const entrega = new Date(t.fecha_entrega+'T23:59:59');
+    const completado = new Date(t.updated_at);
+    return (completado - entrega) / 86400000; // + tarde, - temprano
+  });
+  const prom = diffs.reduce((a,b)=>a+b,0)/diffs.length;
+  return Math.round(prom*10)/10;
+}
+function labelTiempoPromedio(dias){
+  if(dias===null) return '—';
+  if(Math.abs(dias)<0.3) return 'En el plazo';
+  return dias>0 ? `${dias.toFixed(1)}d tarde (prom.)` : `${Math.abs(dias).toFixed(1)}d antes (prom.)`;
+}
+
+/* Cálculos de carga y cumplimiento */
+function tareasActivasDe(talentoId){
+  return STATE.tareas.filter(t=>t.talento_id===talentoId && t.estado!=='completada' && t.estado!=='bloqueada');
+}
+function nivelCarga(talentoId){
+  const n = tareasActivasDe(talentoId).length;
+  if(n >= UMBRAL_SOBRECARGA) return {n, label:'Sobrecargado', cls:'danger'};
+  if(n >= UMBRAL_OPTIMO) return {n, label:'Óptimo', cls:'ok'};
+  return {n, label:'Bajo', cls:'dim'};
+}
+function cumplimientoDe(talentoId){
+  const finalizadas = STATE.tareas.filter(t=>t.talento_id===talentoId && t.estado==='completada');
+  if(finalizadas.length===0) return null;
+  const aTiempo = finalizadas.filter(t=>{
+    if(!t.fecha_entrega) return true;
+    return new Date(t.updated_at) <= new Date(t.fecha_entrega+'T23:59:59');
+  });
+  return Math.round((aTiempo.length/finalizadas.length)*100);
+}
+function tareasAtrasadasDe(talentoId){
+  return STATE.tareas.filter(t=>t.talento_id===talentoId && isAtrasada(t)).length;
+}
+
+/* ============================================================
+   BOOT / ROUTING
+   ============================================================ */
+async function boot(){
+  const params = new URLSearchParams(location.search);
+  if(params.get('admin')==='1'){
+    STATE.mode='admin';
+    renderAdminGate();
+  } else if(params.has('aprendiz')){
+    STATE.mode='aprendiz';
+    STATE.talentoId = params.get('aprendiz');
+    await loadAll();
+    renderAprendizView();
+    subscribeRealtime(renderAprendizView);
+  } else if(params.get('vista')==='jefe'){
+    STATE.mode='jefe';
+    await loadAll();
+    renderJefeView();
+    subscribeRealtime(renderJefeView);
+  } else if(params.get('solicitar')==='1'){
+    STATE.mode='solicitar';
+    renderSolicitarView();
+  } else {
+    renderNoAccess();
+  }
+}
+
+function renderNoAccess(){
+  $('#app').innerHTML = `
+    <div class="gate">
+      <div class="crown-big">${logoHTML(50)}</div>
+      <h2>LE COLLEZIONI · Equipo Creativo</h2>
+      <p>Este acceso requiere un link válido. Si eres parte del equipo, pide tu link de acceso al administrador.</p>
+    </div>`;
+}
+
+function renderAdminGate(){
+  $('#app').innerHTML = `
+    <div class="gate">
+      <div class="crown-big">${logoHTML(50)}</div>
+      <h2>Acceso administrador</h2>
+      <p>Ingresa la contraseña para gestionar el equipo creativo.</p>
+      <input type="password" id="admin-pass" placeholder="Contraseña" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);">
+        <input type="checkbox" id="admin-show-pass" style="width:auto;"> Mostrar contraseña
+      </label>
+      <button class="btn" id="admin-login-btn">Entrar</button>
+      <div id="admin-error" style="color:var(--danger);font-size:12px;"></div>
+    </div>`;
+  $('#admin-show-pass').onchange = (e)=>{ $('#admin-pass').type = e.target.checked ? 'text' : 'password'; };
+  $('#admin-login-btn').onclick = tryAdminLogin;
+  $('#admin-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') tryAdminLogin(); });
+  $('#admin-pass').focus();
+}
+async function tryAdminLogin(){
+  const val = $('#admin-pass').value.trim();
+  const btn = $('#admin-login-btn'); btn.disabled = true; btn.textContent = 'Verificando...';
+  try{
+    const { data } = await supa.from('config').select('value').eq('key','admin_password_hash').single();
+    const hash = await sha256Hex(val);
+    if(data && hash === data.value){
+      await loadAll();
+      renderAdminApp();
+      subscribeRealtime(()=>{ if(STATE.mode==='admin') renderAdminTab(); });
+    } else {
+      $('#admin-error').textContent = 'Contraseña incorrecta.';
+      btn.disabled = false; btn.textContent = 'Entrar';
+    }
+  }catch(err){
+    $('#admin-error').textContent = 'No se pudo verificar. Revisa que corriste la migración v2 en Supabase.';
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+
+async function loadAll(){
+  const [t,p,ta,m,av,so] = await Promise.all([
+    supa.from('talentos').select('*').order('nombre'),
+    supa.from('proyectos').select('*').order('created_at',{ascending:false}),
+    supa.from('tareas').select('*').order('created_at',{ascending:false}),
+    supa.from('metas').select('*').order('created_at',{ascending:false}),
+    supa.from('avances').select('*').order('created_at',{ascending:false}),
+    supa.from('solicitudes').select('*').order('created_at',{ascending:false}),
+  ]);
+  STATE.talentos = t.data || [];
+  STATE.proyectos = p.data || [];
+  STATE.tareas = ta.data || [];
+  STATE.metas = m.data || [];
+  STATE.avances = av.data || [];
+  STATE.solicitudes = so.data || [];
+}
+
+function subscribeRealtime(cb){
+  supa.channel('cambios-equipo')
+    .on('postgres_changes', {event:'*', schema:'public', table:'talentos'}, async()=>{ await loadAll(); cb(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'proyectos'}, async()=>{ await loadAll(); cb(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'tareas'}, async()=>{ await loadAll(); cb(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'metas'}, async()=>{ await loadAll(); cb(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'avances'}, async()=>{ await loadAll(); cb(); })
+    .on('postgres_changes', {event:'*', schema:'public', table:'solicitudes'}, async()=>{ await loadAll(); cb(); })
+    .subscribe();
+}
+
+/* ============================================================
+   SOLICITUDES (admin)
+   ============================================================ */
+function renderMetricasSolicitudes(){
+  const wrap = $('#solicitudes-metricas');
+  if(!wrap) return;
+  if(STATE.solicitudes.length===0){ wrap.innerHTML=''; return; }
+  const pendientes = STATE.solicitudes.filter(s=>s.estado==='pendiente').length;
+  const convertidas = STATE.solicitudes.filter(s=>s.estado==='convertida');
+  const conteoPorArea = {};
+  STATE.solicitudes.forEach(s=>{ conteoPorArea[s.area_solicitante] = (conteoPorArea[s.area_solicitante]||0)+1; });
+  const areaTop = Object.entries(conteoPorArea).sort((a,b)=>b[1]-a[1])[0];
+  let promDias = '—';
+  if(convertidas.length){
+    const dias = convertidas.map(s=> (new Date(s.updated_at||s.created_at) - new Date(s.created_at))/86400000).filter(d=>d>=0);
+    if(dias.length) promDias = (dias.reduce((a,b)=>a+b,0)/dias.length).toFixed(1)+'d';
+  }
+  wrap.innerHTML = `
+    <div class="card"><div class="label">Pendientes</div><div class="value ${pendientes>0?'gold':''}">${pendientes}</div></div>
+    <div class="card"><div class="label">Total histórico</div><div class="value">${STATE.solicitudes.length}</div></div>
+    <div class="card"><div class="label">Área que más pide</div><div class="value" style="font-size:16px;">${areaTop?areaTop[0]+' ('+areaTop[1]+')':'—'}</div></div>
+    <div class="card"><div class="label">Tiempo prom. a conversión</div><div class="value" style="font-size:16px;">${promDias}</div></div>
+  `;
+  const chartWrap = $('#solicitudes-chart-wrap');
+  if(chartWrap && Object.keys(conteoPorArea).length>1){
+    chartWrap.innerHTML = `<div class="chart-box" style="margin-bottom:20px;"><h3>Solicitudes por área</h3><canvas id="chart-solicitudes-area"></canvas></div>`;
+    destroyChart('chart-solicitudes-area');
+    STATE.charts['chart-solicitudes-area'] = new Chart($('#chart-solicitudes-area'), {
+      type:'bar',
+      data:{labels:Object.keys(conteoPorArea), datasets:[{label:'Solicitudes', data:Object.values(conteoPorArea), backgroundColor:'#c9a45c'}]},
+      options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}},y:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}}}}
+    });
+  } else if(chartWrap){ chartWrap.innerHTML=''; }
+}
+
+function renderAdminSolicitudes(){
+  const view = $('#view-solicitudes');
+  view.innerHTML = `
+    <div class="section-title">Solicitudes de otras áreas</div>
+    <div class="grid-cards" id="solicitudes-metricas"></div>
+    <div id="solicitudes-chart-wrap"></div>
+    <div id="lista-solicitudes"></div>`;
+  renderMetricasSolicitudes();
+  const cont = $('#lista-solicitudes');
+  cont.innerHTML='';
+  if(STATE.solicitudes.length===0){ cont.innerHTML = `<div class="empty-state">No hay solicitudes todavía. Comparte el link de "Solicitar tarea" con otras áreas desde la pestaña Links y respaldo.</div>`; return; }
+  const orden = {pendiente:0, convertida:1, descartada:2};
+  const lista = [...STATE.solicitudes].sort((a,b)=> (orden[a.estado]??9)-(orden[b.estado]??9) || new Date(b.created_at)-new Date(a.created_at));
+  lista.forEach(s=>{
+    const estadoPill = s.estado==='pendiente' ? '<span class="pill warn">Pendiente</span>'
+      : s.estado==='convertida' ? '<span class="pill ok">Convertida en tarea</span>'
+      : '<span class="pill dim">Descartada</span>';
+    cont.appendChild(el(`
+      <div class="list-row" style="align-items:flex-start;">
+        <div class="flex-grow">
+          <div class="person-name">${s.asunto}</div>
+          <div class="person-role">${s.area_solicitante}${s.nombre_solicitante?' · '+s.nombre_solicitante:''} · Necesitan: ${fmtDate(s.fecha_necesaria)}${s.hora_necesaria?' '+s.hora_necesaria:''}</div>
+          <div class="meta" style="margin-top:6px;">${estadoPill} ${pillPrioridad(s.prioridad)}</div>
+        </div>
+        <div class="row-actions">
+          <button class="btn secondary small" data-ver="${s.id}">Ver</button>
+          ${s.estado==='pendiente'?`<button class="btn danger small" data-descartar="${s.id}">Descartar</button>`:''}
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-ver]').forEach(b=> b.onclick = ()=> openSolicitudDetalleModal(b.dataset.ver));
+  cont.querySelectorAll('[data-descartar]').forEach(b=> b.onclick = async ()=>{
+    if(!confirm('¿Descartar esta solicitud?')) return;
+    await supa.from('solicitudes').update({estado:'descartada', updated_at:new Date().toISOString()}).eq('id', b.dataset.descartar);
+    await loadAll(); renderAdminSolicitudes();
+    toast('Solicitud descartada');
+  });
+}
+
+function openSolicitudDetalleModal(id){
+  const s = STATE.solicitudes.find(x=>x.id===id);
+  if(!s) return;
+  const links = (s.links_referencia||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${s.asunto}</h3>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">${s.area_solicitante}${s.nombre_solicitante?' · '+s.nombre_solicitante:''} · Necesitan: ${fmtDate(s.fecha_necesaria)}${s.hora_necesaria?' '+s.hora_necesaria:''} · Tipo: ${s.tipo||'—'}</p>
+        ${s.descripcion?`<p style="font-size:13px;margin-bottom:10px;white-space:pre-wrap;">${s.descripcion}</p>`:''}
+        ${s.archivo_url?`<p style="margin-bottom:10px;"><a href="${s.archivo_url}" target="_blank" class="pill ok">📎 ${s.archivo_nombre||'Ver archivo adjunto'}</a></p>`:''}
+        ${links.length?`<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;color:var(--text-dim);margin-bottom:6px;">Referencias</label>${links.map(l=>`<div class="link-item-row"><a href="${l}" target="_blank" style="font-size:12px;word-break:break-all;">${l}</a></div>`).join('')}</div>`:''}
+        <div class="modal-actions">
+          <button class="btn secondary" id="cerrar">Cerrar</button>
+          ${s.estado==='pendiente'?`<button class="btn secondary" id="convertir-multi">Convertir en varias tareas</button><button class="btn" id="convertir">Convertir en 1 tarea</button>`:''}
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  $('#cerrar', overlay).onclick = ()=> overlay.remove();
+  if(s.estado==='pendiente'){
+    $('#convertir', overlay).onclick = ()=>{
+      overlay.remove();
+      const descripcionCompleta = [s.descripcion, links.length?('Referencias:\n'+links.join('\n')):'', `Solicitado por: ${s.area_solicitante}${s.nombre_solicitante?' ('+s.nombre_solicitante+')':''}`].filter(Boolean).join('\n\n');
+      openTareaModal(null, {
+        titulo: s.asunto,
+        descripcion: descripcionCompleta,
+        tipo: s.tipo,
+        fecha_entrega: s.fecha_necesaria,
+        prioridad: s.prioridad,
+        _solicitudId: s.id
+      });
+    };
+    $('#convertir-multi', overlay).onclick = ()=>{
+      overlay.remove();
+      openConvertirMultiModal(s, links);
+    };
+  }
+}
+
+function openConvertirMultiModal(s, links){
+  const descripcionCompleta = [s.descripcion, links.length?('Referencias:\n'+links.join('\n')):'', `Solicitado por: ${s.area_solicitante}${s.nombre_solicitante?' ('+s.nombre_solicitante+')':''}`].filter(Boolean).join('\n\n');
+  let filas = [{titulo:s.asunto, talento:''}, {titulo:'', talento:''}];
+  function renderFilas(container){
+    container.innerHTML = filas.map((f,i)=>`
+      <div class="field" style="display:flex;gap:8px;align-items:flex-end;">
+        <div style="flex:1;"><label>Título tarea ${i+1}</label><input class="multi-titulo" data-i="${i}" value="${f.titulo}"></div>
+        <div style="flex:1;"><label>Asignar a</label><select class="multi-talento" data-i="${i}"><option value="">— Sin asignar —</option>${STATE.talentos.map(t=>`<option value="${t.id}" ${f.talento===t.id?'selected':''}>${t.nombre}</option>`).join('')}</select></div>
+      </div>`).join('');
+    container.querySelectorAll('.multi-titulo').forEach(inp=> inp.oninput = e=> filas[+e.target.dataset.i].titulo = e.target.value);
+    container.querySelectorAll('.multi-talento').forEach(sel=> sel.onchange = e=> filas[+e.target.dataset.i].talento = e.target.value);
+  }
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>Convertir en varias tareas</h3>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Todas comparten proyecto, fecha, prioridad y descripción de la solicitud — solo cambia el título y a quién se asigna cada una.</p>
+        <div class="field"><label>Proyecto (para todas)</label>
+          <select id="m-proyecto"><option value="">— Sin proyecto —</option>${STATE.proyectos.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')}</select>
+        </div>
+        <div id="filas-multi"></div>
+        <button class="btn secondary small" id="add-fila" style="margin-top:8px;">+ Agregar otra tarea</button>
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn" id="crear-todas">Crear tareas</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  const cont = $('#filas-multi', overlay);
+  renderFilas(cont);
+  $('#add-fila', overlay).onclick = ()=>{ filas.push({titulo:'', talento:''}); renderFilas(cont); };
+  $('#cancel', overlay).onclick = ()=> overlay.remove();
+  $('#crear-todas', overlay).onclick = async ()=>{
+    const validas = filas.filter(f=>f.titulo.trim());
+    if(validas.length===0){ toast('Agrega al menos un título'); return; }
+    const proyecto_id = $('#m-proyecto', overlay).value || null;
+    let primerId = null;
+    for(const f of validas){
+      const { data } = await supa.from('tareas').insert({
+        titulo: f.titulo.trim(), descripcion: descripcionCompleta, proyecto_id,
+        tipo: s.tipo, talento_id: f.talento || null, fecha_entrega: s.fecha_necesaria,
+        prioridad: s.prioridad, estado: 'pendiente'
+      }).select();
+      if(data && data[0] && !primerId) primerId = data[0].id;
+    }
+    await supa.from('solicitudes').update({estado:'convertida', tarea_id: primerId, updated_at:new Date().toISOString()}).eq('id', s.id);
+    overlay.remove();
+    await loadAll(); renderAdminTab();
+    toast(`${validas.length} tareas creadas`);
+  };
+}
+
+/* ============================================================
+   VISTA SOLICITAR (formulario público para otras áreas)
+   ============================================================ */
+function renderSolicitarView(){
+  $('#app').innerHTML = `
+    <div class="topbar">
+      <div class="brand">${logoHTML(30)}<div class="sub">Solicitar tarea al equipo creativo</div></div>
+      <div class="topbar-actions">${themeToggleHTML()}</div>
+    </div>
+    <div class="solicitud-wrap">
+      <p style="color:var(--text-dim);font-size:13px;margin-bottom:20px;">Completa este formulario para pedir una pieza, diseño, video u otro material al equipo creativo. Tu solicitud será revisada y asignada.</p>
+      <div id="solicitud-form">
+        <div class="field"><label>Área o persona que solicita *</label><input id="s-area" placeholder="Ej. Mercadeo, Tienda Cali, Gerencia..."></div>
+        <div class="field"><label>Tu nombre (opcional)</label><input id="s-nombre"></div>
+        <div class="field"><label>Asunto *</label><input id="s-asunto" placeholder="¿Qué necesitas?"></div>
+        <div class="field"><label>Descripción</label><textarea id="s-desc" placeholder="Cuéntanos con detalle qué necesitas, para qué es, contexto importante..."></textarea></div>
+        <div class="field"><label>Tipo</label><input id="s-tipo" placeholder="Diseño, video, pauta, contenido..."></div>
+        <div class="field"><label>Fecha en que lo necesitas</label><input type="date" id="s-fecha"></div>
+        <div class="field"><label>Hora (opcional)</label><input type="time" id="s-hora"></div>
+        <div class="field"><label>Prioridad</label>
+          <select id="s-prioridad">${PRIORIDADES.map(p=>`<option value="${p}" ${p==='media'?'selected':''}>${p}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Links de referencia (opcional, uno por línea)</label><textarea id="s-links" placeholder="https://..."></textarea></div>
+        <div class="field"><label>O adjunta un archivo de referencia (opcional)</label><input type="file" id="s-archivo"></div>
+        <button class="btn" id="btn-enviar-solicitud" style="width:100%;">Enviar solicitud</button>
+        <div id="s-error" style="color:var(--danger);font-size:12px;margin-top:8px;"></div>
+      </div>
+    </div>`;
+
+  $('#btn-enviar-solicitud').onclick = async ()=>{
+    const area = $('#s-area').value.trim();
+    const asunto = $('#s-asunto').value.trim();
+    if(!area || !asunto){ $('#s-error').textContent = 'El área y el asunto son obligatorios.'; return; }
+    const btn = $('#btn-enviar-solicitud'); btn.disabled = true; btn.textContent = 'Enviando...';
+    let archivo_url = null, archivo_nombre = null;
+    const file = $('#s-archivo').files[0];
+    if(file){
+      try{
+        const path = `solicitudes/${Date.now()}_${file.name}`;
+        const { error: upErr } = await supa.storage.from(BUCKET_ARCHIVOS).upload(path, file);
+        if(!upErr){
+          const { data: pub } = supa.storage.from(BUCKET_ARCHIVOS).getPublicUrl(path);
+          archivo_url = pub.publicUrl;
+          archivo_nombre = file.name;
+        }
+      }catch(e){ /* si falla la subida, se envía igual sin archivo */ }
+    }
+    const payload = {
+      area_solicitante: area,
+      nombre_solicitante: $('#s-nombre').value.trim(),
+      asunto,
+      descripcion: $('#s-desc').value.trim(),
+      tipo: $('#s-tipo').value.trim(),
+      fecha_necesaria: $('#s-fecha').value || null,
+      hora_necesaria: $('#s-hora').value || null,
+      prioridad: $('#s-prioridad').value,
+      links_referencia: $('#s-links').value.trim(),
+      archivo_url, archivo_nombre,
+      estado: 'pendiente'
+    };
+    const { error } = await supa.from('solicitudes').insert(payload);
+    if(error){
+      $('#s-error').textContent = 'No se pudo enviar. Intenta de nuevo en un momento.';
+      btn.disabled = false; btn.textContent = 'Enviar solicitud';
+      return;
+    }
+    $('.solicitud-wrap').innerHTML = `
+      <div class="solicitud-success">
+        <div class="check">✓</div>
+        <h2>Solicitud enviada</h2>
+        <p style="color:var(--text-dim);font-size:13px;margin-top:8px;">El equipo creativo la revisará pronto.</p>
+        <button class="btn secondary" style="margin-top:20px;" id="btn-otra">Enviar otra solicitud</button>
+      </div>`;
+    $('#btn-otra').onclick = renderSolicitarView;
+  };
+}
+
+/* ============================================================
+   VISTA APRENDIZ (solo lectura)
+   ============================================================ */
+function renderAprendizView(){
+  const talento = STATE.talentos.find(t=> t.id===STATE.talentoId || t.nombre.toLowerCase()===decodeURIComponent(STATE.talentoId).toLowerCase());
+  if(!talento){
+    $('#app').innerHTML = `<div class="gate"><div class="crown-big">${logoHTML(50)}</div><h2>Talento no encontrado</h2><p>Verifica tu link de acceso con el administrador.</p></div>`;
+    return;
+  }
+  if(talento.acceso_habilitado === false){
+    $('#app').innerHTML = `<div class="gate"><div class="crown-big">${logoHTML(50)}</div><h2>Acceso desactivado</h2><p>Tu acceso a este panel fue desactivado. Contacta al administrador si crees que es un error.</p></div>`;
+    return;
+  }
+  const misTareas = STATE.tareas.filter(t=>t.talento_id===talento.id).sort((a,b)=> new Date(a.fecha_entrega||'2100-01-01') - new Date(b.fecha_entrega||'2100-01-01'));
+  const activas = tareasActivasDe(talento.id).length;
+  const atrasadas = tareasAtrasadasDe(talento.id);
+  const cumpl = cumplimientoDe(talento.id);
+  const tProm = tiempoPromedioEntrega(talento.id);
+
+  $('#app').innerHTML = `
+    <div class="topbar">
+      <div class="brand">${logoHTML(30)}<div class="sub">Mis tareas</div></div>
+      <div class="topbar-actions">${themeToggleHTML()}<span class="mode-badge">Vista aprendiz</span></div>
+    </div>
+    <main>
+      <span class="readonly-badge">🔒 Solo lectura</span>
+      <div class="list-row" style="margin-bottom:20px;">
+        <div class="avatar">${talento.avatar_inicial || initials(talento.nombre)}</div>
+        <div>
+          <div class="person-name">${talento.nombre}</div>
+          <div class="person-role">${talento.rol}</div>
+        </div>
+      </div>
+      <div class="grid-cards">
+        <div class="card"><div class="label">Tareas activas</div><div class="value">${activas}</div></div>
+        <div class="card"><div class="label">Atrasadas</div><div class="value ${atrasadas>0?'danger':''}">${atrasadas}</div></div>
+        <div class="card"><div class="label">Cumplimiento</div><div class="value gold">${cumpl===null?'—':cumpl+'%'}</div></div>
+        <div class="card"><div class="label">Tiempo de entrega</div><div class="value" style="font-size:15px;">${labelTiempoPromedio(tProm)}</div></div>
+      </div>
+      <div class="section-title">Mis tareas</div>
+      <div id="mis-tareas"></div>
+    </main>`;
+
+  const cont = $('#mis-tareas');
+  if(misTareas.length===0){ cont.innerHTML = `<div class="empty-state">No tienes tareas asignadas todavía.</div>`; return; }
+  misTareas.forEach(t=>{
+    const avances = avancesDe(t.id);
+    cont.appendChild(el(`
+      <div class="list-row" style="align-items:flex-start;">
+        <div class="flex-grow">
+          <div class="person-name">${t.titulo}</div>
+          <div class="person-role">${proyectoNombre(t.proyecto_id)} · ${t.tipo||''}</div>
+          ${t.descripcion?`<div style="font-size:12px;color:var(--text-dim);margin-top:6px;">${t.descripcion}</div>`:''}
+          <div class="meta" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            ${pillEstadoTarea(t)} ${pillVencimiento(t)} ${pillPrioridad(t.prioridad)}
+            <span class="pill dim">Entrega: ${fmtDate(t.fecha_entrega)}</span>
+            ${t.fecha_entrega?`<button class="btn secondary small" data-ics="${t.id}">📅 Calendario</button>`:''}
+          </div>
+          ${avances.length? `<div style="margin-top:10px;">${avances.map(a=>`
+            <div class="avance-item">
+              ${a.descripcion}
+              <div class="meta-line">${a.autor||'Administrador'} · ${fmtDate(a.created_at.slice(0,10))}
+              ${a.archivo_url?` · <a href="${a.archivo_url}" target="_blank">Ver archivo</a>`:''}</div>
+            </div>`).join('')}</div>` : ''}
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-ics]').forEach(b=> b.onclick = ()=> descargarICS(misTareas.find(x=>x.id===b.dataset.ics)));
+}
+
+/* ============================================================
+   VISTA JEFE (solo lectura, dashboard completo)
+   ============================================================ */
+function renderJefeView(){
+  $('#app').innerHTML = `
+    <div class="topbar">
+      <div class="brand">${logoHTML(30)}<div class="sub">Equipo Creativo</div></div>
+      <div class="topbar-actions">${themeToggleHTML()}<span class="mode-badge">Vista dirección</span></div>
+    </div>
+    <main>
+      <span class="readonly-badge">🔒 Solo lectura</span>
+      <div class="grid-cards" id="jefe-cards"></div>
+      <div class="charts-grid">
+        <div class="chart-box"><h3>Carga por persona</h3><canvas id="chart-carga-jefe"></canvas></div>
+        <div class="chart-box"><h3>Distribución por estado</h3><canvas id="chart-estado-jefe"></canvas></div>
+      </div>
+      <div class="chart-box" style="margin-bottom:24px;"><h3>Tendencia de tareas completadas</h3><canvas id="chart-tendencia-jefe"></canvas></div>
+      <div class="section-title">Equipo</div>
+      <div id="jefe-talentos"></div>
+      <div class="section-title">Tablero</div>
+      <div class="kanban" id="jefe-kanban"></div>
+    </main>`;
+
+  renderDashboardCards('#jefe-cards');
+  renderCharts('chart-carga-jefe','chart-estado-jefe','chart-tendencia-jefe');
+  renderTalentosResumen('#jefe-talentos');
+  renderKanban('#jefe-kanban', false);
+}
+
+/* ============================================================
+   PIEZAS COMPARTIDAS: dashboard cards, charts, talentos, kanban
+   ============================================================ */
+function renderDashboardCards(sel){
+  const proyectosActivos = STATE.proyectos.filter(p=>p.estado==='en_curso'||p.estado==='en_revision').length;
+  const tareasActivas = STATE.tareas.filter(t=>t.estado!=='completada').length;
+  const tareasAtrasadas = STATE.tareas.filter(isAtrasada).length;
+  const completadas = STATE.tareas.filter(t=>t.estado==='completada');
+  let cumplGeneral = '—';
+  if(completadas.length>0){
+    const aTiempo = completadas.filter(t=> !t.fecha_entrega || new Date(t.updated_at) <= new Date(t.fecha_entrega+'T23:59:59'));
+    cumplGeneral = Math.round((aTiempo.length/completadas.length)*100)+'%';
+  }
+  let mayorCarga = '—';
+  if(STATE.talentos.length){
+    const withLoad = STATE.talentos.map(t=>({t, n:tareasActivasDe(t.id).length})).sort((a,b)=>b.n-a.n);
+    if(withLoad[0] && withLoad[0].n>0) mayorCarga = `${withLoad[0].t.nombre} (${withLoad[0].n})`;
+  }
+  const sobrecargados = STATE.talentos.filter(t=> nivelCarga(t.id).cls==='danger');
+  const pendientesSolicitud = STATE.solicitudes.filter(s=>s.estado==='pendiente').length;
+  const bannerSolicitudes = pendientesSolicitud>0
+    ? `<div class="alert-banner" id="banner-solicitudes" style="border-color:var(--gold);color:var(--gold);background:rgba(201,164,92,.1);cursor:pointer;">📋 Tienes ${pendientesSolicitud} solicitud${pendientesSolicitud===1?'':'es'} nueva${pendientesSolicitud===1?'':'s'} de otras áreas por revisar. Clic para verlas.</div>`
+    : '';
+  const banner = sobrecargados.length
+    ? `<div class="alert-banner">⚠ ${sobrecargados.length===1?'Una persona está':'Hay '+sobrecargados.length+' personas'} sobrecargada${sobrecargados.length===1?'':'s'}: ${sobrecargados.map(t=>t.nombre).join(', ')}. Considera redistribuir tareas.</div>`
+    : '';
+  const vencenPronto = STATE.tareas.filter(t=> !isAtrasada(t) && t.estado!=='completada' && diasParaVencer(t)!==null && diasParaVencer(t)<=DIAS_ALERTA_VENCIMIENTO && diasParaVencer(t)>=0).length;
+  const bannerVence = vencenPronto>0
+    ? `<div class="alert-banner" style="border-color:var(--warn);color:var(--warn);background:rgba(217,164,65,.1);">⏳ ${vencenPronto} tarea${vencenPronto===1?'':'s'} vence${vencenPronto===1?'':'n'} en los próximos ${DIAS_ALERTA_VENCIMIENTO} días.</div>`
+    : '';
+  $(sel).innerHTML = `
+    <div class="card"><div class="label">Proyectos activos</div><div class="value">${proyectosActivos}</div></div>
+    <div class="card"><div class="label">Tareas activas</div><div class="value">${tareasActivas}</div></div>
+    <div class="card"><div class="label">Tareas atrasadas</div><div class="value ${tareasAtrasadas>0?'danger':''}">${tareasAtrasadas}</div></div>
+    <div class="card"><div class="label">Cumplimiento general</div><div class="value gold">${cumplGeneral}</div></div>
+    <div class="card"><div class="label">Mayor carga</div><div class="value" style="font-size:16px;">${mayorCarga}</div></div>
+  `;
+  const parent = $(sel).parentElement;
+  const existing = parent.querySelector('.alert-banner-wrap');
+  if(existing) existing.remove();
+  if(banner || bannerVence || bannerSolicitudes){
+    const wrap = el(`<div class="alert-banner-wrap">${bannerSolicitudes}${banner}${bannerVence}</div>`);
+    parent.insertBefore(wrap, $(sel));
+    const bs = $('#banner-solicitudes', wrap);
+    if(bs) bs.onclick = ()=>{ STATE.activeTab='solicitudes'; renderAdminTab(); };
+  }
+}
+
+function destroyChart(id){ if(STATE.charts[id]){ STATE.charts[id].destroy(); delete STATE.charts[id]; } }
+
+function renderCharts(idCarga, idEstado, idTendencia){
+  destroyChart(idCarga); destroyChart(idEstado); destroyChart(idTendencia);
+
+  const labels = STATE.talentos.map(t=>t.nombre);
+  const data = STATE.talentos.map(t=>tareasActivasDe(t.id).length);
+  STATE.charts[idCarga] = new Chart($('#'+idCarga), {
+    type:'bar',
+    data:{labels, datasets:[{label:'Tareas activas', data, backgroundColor:'#c9a45c'}]},
+    options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}},y:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}}}}
+  });
+
+  const estados = ['pendiente','en_progreso','en_revision','completada'];
+  const estadoLabels = ['Pendiente','En progreso','En revisión','Completada'];
+  const atrasadasCount = STATE.tareas.filter(isAtrasada).length;
+  const counts = estados.map(e=> STATE.tareas.filter(t=>t.estado===e && !isAtrasada(t)).length );
+  STATE.charts[idEstado] = new Chart($('#'+idEstado), {
+    type:'doughnut',
+    data:{labels:[...estadoLabels,'Atrasada'], datasets:[{data:[...counts, atrasadasCount], backgroundColor:['#6b6b6b','#d9a441','#8a7245','#6fae7a','#c05a52']}]},
+    options:{plugins:{legend:{position:'bottom', labels:{color:'#9a978f', boxWidth:10, font:{size:11}}}}}
+  });
+
+  // Tendencia: tareas completadas por semana (últimas 8 semanas) basado en updated_at
+  const weeks = [];
+  const now = new Date();
+  for(let i=7;i>=0;i--){
+    const d = new Date(now); d.setDate(d.getDate()-i*7);
+    weeks.push(d);
+  }
+  const weekLabels = weeks.map(d=>`${d.getDate()}/${d.getMonth()+1}`);
+  const weekCounts = weeks.map((d,i)=>{
+    const start = new Date(d); start.setDate(start.getDate()-7);
+    return STATE.tareas.filter(t=> t.estado==='completada' && new Date(t.updated_at) > start && new Date(t.updated_at) <= d).length;
+  });
+  STATE.charts[idTendencia] = new Chart($('#'+idTendencia), {
+    type:'line',
+    data:{labels:weekLabels, datasets:[{label:'Completadas', data:weekCounts, borderColor:'#c9a45c', backgroundColor:'rgba(201,164,92,.15)', fill:true, tension:.3}]},
+    options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#9a978f'},grid:{display:false}},y:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}}}}
+  });
+}
+
+function renderTalentosResumen(sel){
+  const cont = $(sel);
+  cont.innerHTML='';
+  if(STATE.talentos.length===0){ cont.innerHTML = `<div class="empty-state">No hay talentos registrados.</div>`; return; }
+  STATE.talentos.forEach(t=>{
+    const carga = nivelCarga(t.id);
+    const cumpl = cumplimientoDe(t.id);
+    const tProm = tiempoPromedioEntrega(t.id);
+    cont.appendChild(el(`
+      <div class="list-row">
+        <div class="avatar">${t.avatar_inicial||initials(t.nombre)}</div>
+        <div class="flex-grow">
+          <div class="person-name">${t.nombre}</div>
+          <div class="person-role">${t.rol}</div>
+        </div>
+        <span class="pill dim">${t.estado}</span>
+        <span class="pill ${carga.cls}">${carga.label} (${carga.n})</span>
+        <span class="pill dim">Cumpl: ${cumpl===null?'—':cumpl+'%'}</span>
+        <span class="pill dim">${labelTiempoPromedio(tProm)}</span>
+      </div>`));
+  });
+}
+
+function renderKanban(sel, editable){
+  const cont = $(sel);
+  cont.innerHTML='';
+  ESTADOS_TAREA.forEach(col=>{
+    const items = STATE.tareas.filter(t=>t.estado===col.key);
+    const colEl = el(`<div class="kanban-col" data-estado="${col.key}"><h4>${col.label} <span>${items.length}</span></h4><div class="kcards"></div></div>`);
+    const kcards = $('.kcards', colEl);
+    items.forEach(t=>{
+      const proy = STATE.proyectos.find(p=>p.id===t.proyecto_id);
+      const colorMarca = proy && proy.color ? proy.color : 'transparent';
+      const card = el(`
+        <div class="kcard" draggable="${editable}" data-id="${t.id}" style="border-left:3px solid ${colorMarca};">
+          <div class="t">${t.titulo}</div>
+          <div class="meta">
+            <span class="pill dim">${talentoNombre(t.talento_id)}</span>
+            ${pillPrioridad(t.prioridad)}
+            ${isAtrasada(t)?'<span class="pill danger">Atrasada</span>':pillVencimiento(t)}
+          </div>
+          <div class="meta"><span class="pill dim">${fmtDate(t.fecha_entrega)}</span></div>
+          ${editable?`<select class="reassign" data-id="${t.id}"><option value="">Reasignar a...</option>${STATE.talentos.map(tl=>`<option value="${tl.id}" ${tl.id===t.talento_id?'selected':''}>${tl.nombre}</option>`).join('')}</select>`:''}
+        </div>`);
+      if(editable){
+        card.addEventListener('dragstart', e=>{ card.classList.add('dragging'); e.dataTransfer.setData('text/plain', t.id); });
+        card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+        card.querySelector('.t').addEventListener('click', ()=> openTareaModal(t.id));
+        const sel = card.querySelector('.reassign');
+        sel.addEventListener('click', e=> e.stopPropagation());
+        sel.addEventListener('change', async e=>{
+          e.stopPropagation();
+          await supa.from('tareas').update({talento_id: sel.value || null, updated_at:new Date().toISOString()}).eq('id', t.id);
+          await loadAll(); renderAdminTab();
+          toast('Tarea reasignada');
+        });
+      }
+      kcards.appendChild(card);
+    });
+    if(editable){
+      colEl.addEventListener('dragover', e=>{ e.preventDefault(); colEl.classList.add('dragover'); });
+      colEl.addEventListener('dragleave', ()=> colEl.classList.remove('dragover'));
+      colEl.addEventListener('drop', async e=>{
+        e.preventDefault(); colEl.classList.remove('dragover');
+        const id = e.dataTransfer.getData('text/plain');
+        const tareaAntes = STATE.tareas.find(x=>x.id===id);
+        const estadoAnterior = tareaAntes ? tareaAntes.estado : null;
+        await supa.from('tareas').update({estado:col.key, updated_at:new Date().toISOString()}).eq('id', id);
+        await registrarCambioEstado(id, estadoAnterior, col.key);
+        await loadAll(); renderAdminTab();
+        toast('Tarea actualizada');
+      });
+    }
+    cont.appendChild(colEl);
+  });
+}
+
+/* ============================================================
+   CALENDARIO MENSUAL
+   ============================================================ */
+function renderCalendario(){
+  const view = $('#view-calendario');
+  const year = STATE.calFecha.getFullYear();
+  const month = STATE.calFecha.getMonth();
+  const nombreMes = STATE.calFecha.toLocaleDateString('es-CO',{month:'long', year:'numeric'});
+  const primerDia = new Date(year, month, 1).getDay();
+  const diasEnMes = new Date(year, month+1, 0).getDate();
+  const hoy = new Date();
+
+  let celdas = '';
+  for(let i=0;i<primerDia;i++) celdas += `<div class="cal-cell empty"></div>`;
+  for(let d=1; d<=diasEnMes; d++){
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const tareasDia = STATE.tareas.filter(t=>t.fecha_entrega===dateStr);
+    const esHoy = hoy.getFullYear()===year && hoy.getMonth()===month && hoy.getDate()===d;
+    celdas += `<div class="cal-cell ${esHoy?'today':''}" data-date="${dateStr}">
+      <div class="num">${d}</div>
+      ${tareasDia.length? `<div class="count">${tareasDia.length} tarea${tareasDia.length>1?'s':''}</div>`:''}
+    </div>`;
+  }
+
+  view.innerHTML = `
+    <div class="cal-header">
+      <button class="btn secondary small" id="cal-prev">‹ Anterior</button>
+      <h3>${nombreMes}</h3>
+      <button class="btn secondary small" id="cal-next">Siguiente ›</button>
+    </div>
+    <div class="cal-grid">
+      ${['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map(d=>`<div class="cal-daylabel">${d}</div>`).join('')}
+      ${celdas}
+    </div>
+    <div id="cal-detalle" style="margin-top:20px;"></div>
+  `;
+  $('#cal-prev').onclick = ()=>{ STATE.calFecha = new Date(year, month-1, 1); renderCalendario(); };
+  $('#cal-next').onclick = ()=>{ STATE.calFecha = new Date(year, month+1, 1); renderCalendario(); };
+  view.querySelectorAll('.cal-cell[data-date]').forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+      const date = cell.dataset.date;
+      const tareasDia = STATE.tareas.filter(t=>t.fecha_entrega===date);
+      const det = $('#cal-detalle');
+      if(tareasDia.length===0){ det.innerHTML = `<div class="empty-state">Sin tareas para ${fmtDate(date)}.</div>`; return; }
+      det.innerHTML = `<div class="section-title">Tareas del ${fmtDate(date)}</div>`;
+      tareasDia.forEach(t=>{
+        det.appendChild(el(`
+          <div class="list-row">
+            <div class="flex-grow">
+              <div class="person-name">${t.titulo}</div>
+              <div class="person-role">${talentoNombre(t.talento_id)} · ${proyectoNombre(t.proyecto_id)}</div>
+            </div>
+            ${pillEstadoTarea(t)}
+            <button class="btn secondary small" data-open="${t.id}">Ver</button>
+          </div>`));
+      });
+      det.querySelectorAll('[data-open]').forEach(b=> b.onclick = ()=> openTareaModal(b.dataset.open));
+    });
+  });
+}
+
+/* ============================================================
+   VISTA ADMINISTRADOR
+   ============================================================ */
+function renderAdminApp(){
+  $('#app').innerHTML = `
+    <div class="topbar">
+      <div class="brand">${logoHTML(30)}<div class="sub">Equipo Creativo · Admin</div></div>
+      <div class="topbar-actions">${themeToggleHTML()}<span class="mode-badge">Administrador</span></div>
+    </div>
+    <div class="tabs">
+      <div class="tab" data-tab="dashboard">Dashboard</div>
+      <div class="tab" data-tab="solicitudes">Solicitudes</div>
+      <div class="tab" data-tab="kanban">Tablero</div>
+      <div class="tab" data-tab="calendario">Calendario</div>
+      <div class="tab" data-tab="talentos">Talentos</div>
+      <div class="tab" data-tab="proyectos">Proyectos</div>
+      <div class="tab" data-tab="tareas">Tareas</div>
+      <div class="tab" data-tab="metas">Metas</div>
+      <div class="tab" data-tab="links">Links y respaldo</div>
+    </div>
+    <main>
+      <div class="view" id="view-dashboard"></div>
+      <div class="view" id="view-solicitudes"></div>
+      <div class="view" id="view-kanban"></div>
+      <div class="view" id="view-calendario"></div>
+      <div class="view" id="view-talentos"></div>
+      <div class="view" id="view-proyectos"></div>
+      <div class="view" id="view-tareas"></div>
+      <div class="view" id="view-metas"></div>
+      <div class="view" id="view-links"></div>
+    </main>`;
+  document.querySelectorAll('.tab').forEach(tab=>{
+    tab.onclick = ()=>{ STATE.activeTab = tab.dataset.tab; renderAdminTab(); };
+  });
+  STATE.activeTab='dashboard';
+  renderAdminTab();
+}
+
+function renderAdminTab(){
+  document.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===STATE.activeTab));
+  document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
+  const view = $('#view-'+STATE.activeTab);
+  if(view) view.classList.add('active');
+
+  if(STATE.activeTab==='dashboard') renderAdminDashboard();
+  if(STATE.activeTab==='solicitudes') renderAdminSolicitudes();
+  if(STATE.activeTab==='kanban') renderAdminKanbanTab();
+  if(STATE.activeTab==='calendario') renderCalendario();
+  if(STATE.activeTab==='talentos') renderAdminTalentos();
+  if(STATE.activeTab==='proyectos') renderAdminProyectos();
+  if(STATE.activeTab==='tareas') renderAdminTareas();
+  if(STATE.activeTab==='metas') renderAdminMetas();
+  if(STATE.activeTab==='links') renderAdminLinks();
+}
+
+function renderAdminDashboard(){
+  $('#view-dashboard').innerHTML = `
+    <div class="grid-cards" id="ad-cards"></div>
+    <div class="charts-grid">
+      <div class="chart-box"><h3>Carga por persona</h3><canvas id="chart-carga-ad"></canvas></div>
+      <div class="chart-box"><h3>Distribución por estado</h3><canvas id="chart-estado-ad"></canvas></div>
+    </div>
+    <div class="chart-box" style="margin-bottom:24px;"><h3>Tendencia de tareas completadas</h3><canvas id="chart-tendencia-ad"></canvas></div>
+    <div class="section-title">Equipo</div>
+    <div id="ad-talentos"></div>`;
+  renderDashboardCards('#ad-cards');
+  renderCharts('chart-carga-ad','chart-estado-ad','chart-tendencia-ad');
+  renderTalentosResumen('#ad-talentos');
+}
+
+function renderAdminKanbanTab(){
+  $('#view-kanban').innerHTML = `<div class="section-title">Tablero <button class="btn small" id="btn-nueva-tarea-kanban">+ Nueva tarea</button></div><div class="kanban" id="ad-kanban"></div>`;
+  $('#btn-nueva-tarea-kanban').onclick = ()=> openTareaModal(null);
+  renderKanban('#ad-kanban', true);
+}
+
+/* ---------------- TALENTOS ---------------- */
+function renderAdminTalentos(){
+  $('#view-talentos').innerHTML = `<div class="section-title">Talentos <button class="btn small" id="btn-nuevo-talento">+ Nuevo talento</button></div><div id="lista-talentos"></div>`;
+  $('#btn-nuevo-talento').onclick = ()=> openTalentoModal(null);
+  const cont = $('#lista-talentos');
+  cont.innerHTML='';
+  if(STATE.talentos.length===0){ cont.innerHTML=`<div class="empty-state">No hay talentos aún.</div>`; return; }
+  STATE.talentos.forEach(t=>{
+    const carga = nivelCarga(t.id);
+    cont.appendChild(el(`
+      <div class="list-row">
+        <div class="avatar">${t.avatar_inicial||initials(t.nombre)}</div>
+        <div class="flex-grow">
+          <div class="person-name">${t.nombre}</div>
+          <div class="person-role">${t.rol}</div>
+        </div>
+        <span class="pill dim">${t.estado}</span>
+        <span class="pill ${carga.cls}">${carga.label} (${carga.n})</span>
+        ${t.acceso_habilitado===false?'<span class="pill danger">Acceso revocado</span>':''}
+        <div class="row-actions">
+          <button class="btn secondary small" data-edit="${t.id}">Editar</button>
+          <button class="btn danger small" data-del="${t.id}">Eliminar</button>
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=> openTalentoModal(b.dataset.edit));
+  cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('talentos', b.dataset.del, renderAdminTalentos));
+}
+
+function openTalentoModal(id){
+  const t = id ? STATE.talentos.find(x=>x.id===id) : null;
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${t?'Editar':'Nuevo'} talento</h3>
+        <div class="field"><label>Nombre</label><input id="f-nombre" value="${t?t.nombre:''}"></div>
+        <div class="field"><label>Rol</label><input id="f-rol" value="${t?t.rol:''}" placeholder="Diseño gráfico, fotografía, pauta..."></div>
+        <div class="field"><label>Estado</label>
+          <select id="f-estado">${ESTADOS_TALENTO.map(e=>`<option value="${e}" ${t&&t.estado===e?'selected':''}>${e}</option>`).join('')}</select>
+        </div>
+        ${t?`
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="f-acceso" ${t.acceso_habilitado!==false?'checked':''} style="width:auto;">
+            Acceso a su link de vista habilitado
+          </label>
+        </div>`:''}
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn" id="save">Guardar</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  $('#cancel', overlay).onclick = ()=> overlay.remove();
+  $('#save', overlay).onclick = async ()=>{
+    const nombre = $('#f-nombre', overlay).value.trim();
+    const rol = $('#f-rol', overlay).value.trim();
+    const estado = $('#f-estado', overlay).value;
+    if(!nombre || !rol){ toast('Nombre y rol son obligatorios'); return; }
+    const payload = { nombre, rol, estado, avatar_inicial: initials(nombre) };
+    if(t){
+      payload.acceso_habilitado = $('#f-acceso', overlay).checked;
+      await supa.from('talentos').update(payload).eq('id', t.id);
+      overlay.remove();
+      await loadAll(); renderAdminTalentos();
+      toast('Talento guardado');
+    } else {
+      const { data, error } = await supa.from('talentos').insert(payload).select();
+      overlay.remove();
+      await loadAll(); renderAdminTalentos();
+      if(!error && data && data[0]){
+        mostrarLinkGenerado(data[0]);
+      } else {
+        toast('Talento guardado');
+      }
+    }
+  };
+}
+
+function mostrarLinkGenerado(talento){
+  const base = location.origin + location.pathname;
+  const link = `${base}?aprendiz=${talento.id}`;
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${talento.nombre} — link de acceso listo</h3>
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">Comparte este link para que vea únicamente sus tareas (solo lectura):</p>
+        <div class="field"><input id="nuevo-link" value="${link}" readonly></div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="close-link">Cerrar</button>
+          <button class="btn" id="copy-nuevo-link">Copiar link</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  $('#close-link', overlay).onclick = ()=> overlay.remove();
+  $('#copy-nuevo-link', overlay).onclick = ()=>{ navigator.clipboard.writeText(link); toast('Link copiado'); overlay.remove(); };
+}
+
+/* ---------------- PROYECTOS ---------------- */
+function renderAdminProyectos(){
+  $('#view-proyectos').innerHTML = `<div class="section-title">Proyectos <button class="btn small" id="btn-nuevo-proyecto">+ Nuevo proyecto</button></div><div id="lista-proyectos"></div>`;
+  $('#btn-nuevo-proyecto').onclick = ()=> openProyectoModal(null);
+  const cont = $('#lista-proyectos');
+  cont.innerHTML='';
+  if(STATE.proyectos.length===0){ cont.innerHTML=`<div class="empty-state">No hay proyectos aún.</div>`; return; }
+  STATE.proyectos.forEach(p=>{
+    const nTareas = STATE.tareas.filter(t=>t.proyecto_id===p.id).length;
+    cont.appendChild(el(`
+      <div class="list-row">
+        <div class="flex-grow">
+          <div class="person-name"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${p.color||'#c9a45c'};margin-right:6px;"></span>${p.nombre}</div>
+          <div class="person-role">${p.marca||'—'} · ${nTareas} tareas · Entrega: ${fmtDate(p.fecha_limite)}</div>
+        </div>
+        <span class="pill dim">${p.estado}</span>
+        <div class="row-actions">
+          <button class="btn secondary small" data-edit="${p.id}">Editar</button>
+          <button class="btn danger small" data-del="${p.id}">Eliminar</button>
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=> openProyectoModal(b.dataset.edit));
+  cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('proyectos', b.dataset.del, renderAdminProyectos));
+}
+
+function openProyectoModal(id){
+  const p = id ? STATE.proyectos.find(x=>x.id===id) : null;
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${p?'Editar':'Nuevo'} proyecto</h3>
+        <div class="field"><label>Nombre</label><input id="f-nombre" value="${p?p.nombre:''}"></div>
+        <div class="field"><label>Marca / cliente interno</label><input id="f-marca" value="${p?p.marca||'':''}"></div>
+        <div class="field"><label>Fecha inicio</label><input type="date" id="f-inicio" value="${p?p.fecha_inicio||'':''}"></div>
+        <div class="field"><label>Fecha límite</label><input type="date" id="f-limite" value="${p?p.fecha_limite||'':''}"></div>
+        <div class="field"><label>Estado</label>
+          <select id="f-estado">${ESTADOS_PROYECTO.map(e=>`<option value="${e}" ${p&&p.estado===e?'selected':''}>${e}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Color de marca (para identificar sus tareas de un vistazo)</label><input type="color" id="f-color" value="${p&&p.color?p.color:'#c9a45c'}" style="height:38px;padding:2px;"></div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn" id="save">Guardar</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  $('#cancel', overlay).onclick = ()=> overlay.remove();
+  $('#save', overlay).onclick = async ()=>{
+    const nombre = $('#f-nombre', overlay).value.trim();
+    if(!nombre){ toast('El nombre es obligatorio'); return; }
+    const payload = {
+      nombre,
+      marca: $('#f-marca', overlay).value.trim(),
+      fecha_inicio: $('#f-inicio', overlay).value || null,
+      fecha_limite: $('#f-limite', overlay).value || null,
+      estado: $('#f-estado', overlay).value,
+      color: $('#f-color', overlay).value
+    };
+    if(p) await supa.from('proyectos').update(payload).eq('id', p.id);
+    else await supa.from('proyectos').insert(payload);
+    overlay.remove();
+    await loadAll(); renderAdminProyectos();
+    toast('Proyecto guardado');
+  };
+}
+
+/* ---------------- TAREAS ---------------- */
+function tareasFiltradas(){
+  const f = STATE.filtroTareas;
+  return STATE.tareas.filter(t=>
+    (!f.talento || t.talento_id===f.talento) &&
+    (!f.proyecto || t.proyecto_id===f.proyecto) &&
+    (!f.prioridad || t.prioridad===f.prioridad) &&
+    (!f.estado || (f.estado==='atrasada' ? isAtrasada(t) : t.estado===f.estado)) &&
+    (!f.q || t.titulo.toLowerCase().includes(f.q.toLowerCase()) || (t.descripcion||'').toLowerCase().includes(f.q.toLowerCase()))
+  );
+}
+
+function renderAdminTareas(){
+  $('#view-tareas').innerHTML = `
+    <div class="section-title">Tareas <button class="btn small" id="btn-nueva-tarea">+ Nueva tarea</button></div>
+    <div class="filtros">
+      <input type="text" id="fil-q" placeholder="Buscar título o descripción..." value="${STATE.filtroTareas.q}">
+      <select id="fil-talento"><option value="">Todos los talentos</option>${STATE.talentos.map(t=>`<option value="${t.id}" ${STATE.filtroTareas.talento===t.id?'selected':''}>${t.nombre}</option>`).join('')}</select>
+      <select id="fil-proyecto"><option value="">Todos los proyectos</option>${STATE.proyectos.map(p=>`<option value="${p.id}" ${STATE.filtroTareas.proyecto===p.id?'selected':''}>${p.nombre}</option>`).join('')}</select>
+      <select id="fil-prioridad"><option value="">Toda prioridad</option>${PRIORIDADES.map(p=>`<option value="${p}" ${STATE.filtroTareas.prioridad===p?'selected':''}>${p}</option>`).join('')}</select>
+      <select id="fil-estado">
+        <option value="">Todo estado</option>
+        ${ESTADOS_TAREA.map(e=>`<option value="${e.key}" ${STATE.filtroTareas.estado===e.key?'selected':''}>${e.label}</option>`).join('')}
+        <option value="atrasada" ${STATE.filtroTareas.estado==='atrasada'?'selected':''}>Atrasada</option>
+      </select>
+      <button class="btn secondary small" id="fil-limpiar">Limpiar</button>
+    </div>
+    <div id="lista-tareas"></div>`;
+  $('#btn-nueva-tarea').onclick = ()=> openTareaModal(null);
+  $('#fil-q').oninput = e=>{ STATE.filtroTareas.q = e.target.value; renderListaTareas(); };
+  $('#fil-talento').onchange = e=>{ STATE.filtroTareas.talento = e.target.value; renderListaTareas(); };
+  $('#fil-proyecto').onchange = e=>{ STATE.filtroTareas.proyecto = e.target.value; renderListaTareas(); };
+  $('#fil-prioridad').onchange = e=>{ STATE.filtroTareas.prioridad = e.target.value; renderListaTareas(); };
+  $('#fil-estado').onchange = e=>{ STATE.filtroTareas.estado = e.target.value; renderListaTareas(); };
+  $('#fil-limpiar').onclick = ()=>{ STATE.filtroTareas = {talento:'', proyecto:'', prioridad:'', estado:'', q:''}; renderAdminTareas(); };
+  renderListaTareas();
+}
+
+function renderListaTareas(){
+  const cont = $('#lista-tareas');
+  cont.innerHTML='';
+  const lista = tareasFiltradas();
+  if(lista.length===0){ cont.innerHTML=`<div class="empty-state">No hay tareas que coincidan.</div>`; return; }
+  lista.forEach(t=>{
+    const proy = STATE.proyectos.find(p=>p.id===t.proyecto_id);
+    const colorMarca = proy && proy.color ? proy.color : null;
+    cont.appendChild(el(`
+      <div class="list-row" style="align-items:flex-start;${colorMarca?`border-left:3px solid ${colorMarca};`:''}">
+        <div class="flex-grow">
+          <div class="person-name">${t.titulo}</div>
+          <div class="person-role">${proyectoNombre(t.proyecto_id)} · ${talentoNombre(t.talento_id)} · Entrega: ${fmtDate(t.fecha_entrega)}</div>
+          <div class="meta" style="margin-top:6px;">${pillEstadoTarea(t)} ${pillVencimiento(t)} ${pillPrioridad(t.prioridad)}
+          ${t.link_archivo?`<a href="${t.link_archivo}" target="_blank" class="pill ok">Ver archivo</a>`:''}
+          ${avancesDe(t.id).length?`<span class="pill dim">${avancesDe(t.id).length} avance(s)</span>`:''}</div>
+        </div>
+        <div class="row-actions">
+          <button class="btn secondary small" data-edit="${t.id}">Editar</button>
+          <button class="btn danger small" data-del="${t.id}">Eliminar</button>
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=> openTareaModal(b.dataset.edit));
+  cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('tareas', b.dataset.del, renderAdminTareas));
+}
+
+function renderAvancesModal(overlay, tareaId){
+  const cont = $('#avances-list', overlay);
+  if(!cont) return;
+  const avances = avancesDe(tareaId);
+  cont.innerHTML = avances.length? '' : `<div class="empty-state" style="padding:8px;">Sin avances registrados.</div>`;
+  avances.forEach(a=>{
+    cont.appendChild(el(`
+      <div class="avance-item">
+        ${a.descripcion}
+        <div class="meta-line">${a.autor||'Administrador'} · ${fmtDate(a.created_at.slice(0,10))}
+        ${a.archivo_url?` · <a href="${a.archivo_url}" target="_blank">Ver archivo</a>`:''}</div>
+      </div>`));
+  });
+}
+
+function openTareaModal(id, prefill){
+  const t = id ? STATE.tareas.find(x=>x.id===id) : null;
+  const pf = prefill || {};
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>${t?'Editar':'Nueva'} tarea</h3>
+        ${pf._solicitudId?`<p style="font-size:12px;color:var(--gold);margin-bottom:10px;">📋 Creando desde una solicitud entrante — revisa y completa los campos.</p>`:''}
+        <div class="field"><label>Título</label><input id="f-titulo" value="${t?t.titulo:(pf.titulo||'')}"></div>
+        <div class="field"><label>Descripción</label><textarea id="f-desc">${t?t.descripcion||'':(pf.descripcion||'')}</textarea></div>
+        <div class="field"><label>Proyecto</label>
+          <select id="f-proyecto"><option value="">— Sin proyecto —</option>${STATE.proyectos.map(p=>`<option value="${p.id}" ${t&&t.proyecto_id===p.id?'selected':''}>${p.nombre}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Tipo</label><input id="f-tipo" value="${t?t.tipo||'':(pf.tipo||'')}" placeholder="Diseño, fotografía, video, copy, pauta..."></div>
+        <div class="field"><label>Talento asignado</label>
+          <select id="f-talento"><option value="">— Sin asignar —</option>${STATE.talentos.map(p=>`<option value="${p.id}" ${t&&t.talento_id===p.id?'selected':''}>${p.nombre}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Fecha de entrega</label><input type="date" id="f-fecha" value="${t?t.fecha_entrega||'':(pf.fecha_entrega||'')}"></div>
+        <div class="field"><label>Prioridad</label>
+          <select id="f-prioridad">${PRIORIDADES.map(p=>`<option value="${p}" ${(t?t.prioridad===p:pf.prioridad===p)?'selected':''}>${p}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Estado</label>
+          <select id="f-estado">${ESTADOS_TAREA.map(e=>`<option value="${e.key}" ${t&&t.estado===e.key?'selected':''}>${e.label}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Link del archivo final (al completar)</label><input id="f-link" value="${t?t.link_archivo||'':''}" placeholder="https://..."></div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn" id="save">Guardar</button>
+        </div>
+        ${t?`
+        <div class="avance-form" style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${t.estado==='en_revision'?`
+          <button class="btn small" id="btn-aprobar" style="background:var(--ok);color:#0a0a0a;">✓ Aprobar y completar</button>
+          <button class="btn danger small" id="btn-devolver">✗ Devolver con comentario</button>`:''}
+          <button class="btn secondary small" id="btn-imprimir-brief">🖨 Imprimir brief</button>
+          ${t.fecha_entrega?`<button class="btn secondary small" id="btn-ics">📅 Agregar a calendario</button>`:''}
+        </div>
+        <div class="avance-form">
+          <label style="display:block;font-size:12px;color:var(--text-dim);margin-bottom:8px;">Avances, archivos e historial</label>
+          <div id="avances-list"></div>
+          <div class="field" style="margin-top:10px;"><textarea id="f-avance-desc" placeholder="Describe el avance..."></textarea></div>
+          <div class="field"><input type="file" id="f-avance-file"></div>
+          <button class="btn secondary small" id="btn-add-avance">+ Agregar avance</button>
+          <div id="avance-progress" style="font-size:11px;color:var(--text-dim);margin-top:6px;"></div>
+        </div>`:''}
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  if(t) renderAvancesModal(overlay, t.id);
+  $('#cancel', overlay).onclick = ()=> overlay.remove();
+  $('#save', overlay).onclick = async ()=>{
+    const titulo = $('#f-titulo', overlay).value.trim();
+    if(!titulo){ toast('El título es obligatorio'); return; }
+    const nuevoEstado = $('#f-estado', overlay).value;
+    const payload = {
+      titulo,
+      descripcion: $('#f-desc', overlay).value.trim(),
+      proyecto_id: $('#f-proyecto', overlay).value || null,
+      tipo: $('#f-tipo', overlay).value.trim(),
+      talento_id: $('#f-talento', overlay).value || null,
+      fecha_entrega: $('#f-fecha', overlay).value || null,
+      prioridad: $('#f-prioridad', overlay).value,
+      estado: nuevoEstado,
+      link_archivo: $('#f-link', overlay).value.trim(),
+      updated_at: new Date().toISOString()
+    };
+    if(t){
+      await supa.from('tareas').update(payload).eq('id', t.id);
+      await registrarCambioEstado(t.id, t.estado, nuevoEstado);
+    } else {
+      const { data } = await supa.from('tareas').insert(payload).select();
+      if(pf._solicitudId && data && data[0]){
+        await supa.from('solicitudes').update({estado:'convertida', tarea_id:data[0].id, updated_at:new Date().toISOString()}).eq('id', pf._solicitudId);
+      }
+    }
+    overlay.remove();
+    await loadAll(); renderAdminTab();
+    toast(pf._solicitudId ? 'Solicitud convertida en tarea' : 'Tarea guardada');
+  };
+  if(t){
+    $('#btn-imprimir-brief', overlay).onclick = ()=> generarBriefTarea(t.id);
+    if($('#btn-ics', overlay)) $('#btn-ics', overlay).onclick = ()=> descargarICS(t);
+    if($('#btn-aprobar', overlay)){
+      $('#btn-aprobar', overlay).onclick = async ()=>{
+        await supa.from('tareas').update({estado:'completada', updated_at:new Date().toISOString()}).eq('id', t.id);
+        await registrarCambioEstado(t.id, t.estado, 'completada', 'Administrador (aprobado)');
+        overlay.remove();
+        await loadAll(); renderAdminTab();
+        toast('Tarea aprobada y completada');
+      };
+    }
+    if($('#btn-devolver', overlay)){
+      $('#btn-devolver', overlay).onclick = async ()=>{
+        const comentario = prompt('¿Qué hay que corregir? Este comentario quedará visible para el aprendiz.');
+        if(comentario===null) return;
+        await supa.from('tareas').update({estado:'en_progreso', updated_at:new Date().toISOString()}).eq('id', t.id);
+        await supa.from('avances').insert({tarea_id: t.id, descripcion: `Devuelto para corrección: ${comentario}`, autor:'Administrador'});
+        overlay.remove();
+        await loadAll(); renderAdminTab();
+        toast('Tarea devuelta con comentario');
+      };
+    }
+  }
+  if(t){
+    $('#btn-add-avance', overlay).onclick = async ()=>{
+      const desc = $('#f-avance-desc', overlay).value.trim();
+      if(!desc){ toast('Escribe una descripción del avance'); return; }
+      const fileInput = $('#f-avance-file', overlay);
+      const file = fileInput.files[0];
+      const progressEl = $('#avance-progress', overlay);
+      let archivo_url = null, archivo_nombre = null;
+      try{
+        if(file){
+          progressEl.textContent = 'Subiendo archivo...';
+          const path = `${t.id}/${Date.now()}_${file.name}`;
+          const { error: upErr } = await supa.storage.from(BUCKET_ARCHIVOS).upload(path, file);
+          if(upErr) throw upErr;
+          const { data: pub } = supa.storage.from(BUCKET_ARCHIVOS).getPublicUrl(path);
+          archivo_url = pub.publicUrl;
+          archivo_nombre = file.name;
+        }
+        await supa.from('avances').insert({
+          tarea_id: t.id, descripcion: desc, autor: 'Administrador',
+          archivo_url, archivo_nombre
+        });
+        await loadAll();
+        $('#f-avance-desc', overlay).value = '';
+        fileInput.value = '';
+        progressEl.textContent = '';
+        renderAvancesModal(overlay, t.id);
+        toast('Avance agregado');
+      }catch(err){
+        progressEl.textContent = 'Error al subir. Verifica que creaste el bucket "archivos" en Supabase (ver migración v2).';
+      }
+    };
+  }
+}
+
+/* ---------------- METAS ---------------- */
+function renderAdminMetas(){
+  $('#view-metas').innerHTML = `
+    <div class="section-title">Metas <button class="btn small" id="btn-nueva-meta">+ Nueva meta</button></div>
+    <div id="metas-chart-wrap"></div>
+    <div id="lista-metas"></div>`;
+  $('#btn-nueva-meta').onclick = ()=> openMetaModal(null);
+  renderMetasTrendChart();
+  const cont = $('#lista-metas');
+  cont.innerHTML='';
+  if(STATE.metas.length===0){ cont.innerHTML=`<div class="empty-state">No hay metas configuradas.</div>`; return; }
+  STATE.metas.forEach(m=>{
+    let real = null;
+    if(m.talento_id) real = cumplimientoDe(m.talento_id);
+    const pct = real===null? 0 : real;
+    cont.appendChild(el(`
+      <div class="list-row" style="align-items:flex-start;">
+        <div class="flex-grow">
+          <div class="person-name">${m.descripcion}</div>
+          <div class="person-role">${m.talento_id?talentoNombre(m.talento_id):(m.proyecto_id?proyectoNombre(m.proyecto_id):'General')} · Periodo: ${m.periodo||'—'} · Meta: ${m.meta_porcentaje}%</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(pct,100)}%"></div></div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Real: ${real===null?'sin datos':pct+'%'}</div>
+        </div>
+        <div class="row-actions">
+          <button class="btn danger small" data-del="${m.id}">Eliminar</button>
+        </div>
+      </div>`));
+  });
+  cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('metas', b.dataset.del, renderAdminMetas));
+}
+
+function renderMetasTrendChart(){
+  const wrap = $('#metas-chart-wrap');
+  if(!wrap) return;
+  const periodos = [...new Set(STATE.metas.map(m=>m.periodo).filter(Boolean))].sort();
+  if(periodos.length===0){ wrap.innerHTML=''; return; }
+  wrap.innerHTML = `<div class="chart-box" style="margin-bottom:20px;"><h3>Meta vs. real por periodo</h3><canvas id="chart-metas-trend"></canvas></div>`;
+  const metaProm = periodos.map(per=>{
+    const ms = STATE.metas.filter(m=>m.periodo===per);
+    return Math.round(ms.reduce((s,m)=>s+Number(m.meta_porcentaje||0),0)/ms.length);
+  });
+  const realProm = periodos.map(per=>{
+    const ms = STATE.metas.filter(m=>m.periodo===per && m.talento_id);
+    const reales = ms.map(m=>cumplimientoDe(m.talento_id)).filter(v=>v!==null);
+    return reales.length? Math.round(reales.reduce((s,v)=>s+v,0)/reales.length) : 0;
+  });
+  destroyChart('chart-metas-trend');
+  STATE.charts['chart-metas-trend'] = new Chart($('#chart-metas-trend'), {
+    type:'bar',
+    data:{labels:periodos, datasets:[
+      {label:'Meta', data:metaProm, backgroundColor:'#8a7245'},
+      {label:'Real', data:realProm, backgroundColor:'#c9a45c'}
+    ]},
+    options:{plugins:{legend:{labels:{color:'#9a978f'}}}, scales:{x:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}},y:{ticks:{color:'#9a978f'},grid:{color:'#2a2a2f'}}}}
+  });
+}
+
+function generarReporteMensual(){
+  const now = new Date();
+  const mesNombre = now.toLocaleDateString('es-CO',{month:'long', year:'numeric'});
+  const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1);
+  const filasTalento = STATE.talentos.map(t=>{
+    const completadasMes = STATE.tareas.filter(x=>x.talento_id===t.id && x.estado==='completada' && new Date(x.updated_at)>=inicioMes);
+    const cumpl = cumplimientoDe(t.id);
+    const atrasadas = tareasAtrasadasDe(t.id);
+    const tProm = tiempoPromedioEntrega(t.id);
+    return `<tr>
+      <td>${t.nombre}</td><td>${t.rol}</td>
+      <td>${completadasMes.length}</td>
+      <td>${atrasadas}</td>
+      <td>${cumpl===null?'—':cumpl+'%'}</td>
+      <td>${labelTiempoPromedio(tProm)}</td>
+    </tr>`;
+  }).join('');
+  const html = `
+    <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Reporte mensual — LE COLLEZIONI</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:40px;color:#111;}
+      h1{font-size:20px;margin-bottom:4px;}
+      .sub{color:#666;font-size:13px;margin-bottom:24px;text-transform:capitalize;}
+      table{width:100%;border-collapse:collapse;margin-top:10px;}
+      th,td{border:1px solid #ddd;padding:8px 10px;font-size:13px;text-align:left;}
+      th{background:#f5f5f5;}
+      @media print{ .no-print{display:none;} }
+    </style></head><body>
+    <h1>LE COLLEZIONI · Reporte mensual del equipo creativo</h1>
+    <div class="sub">${mesNombre}</div>
+    <table>
+      <thead><tr><th>Talento</th><th>Rol</th><th>Completadas este mes</th><th>Atrasadas actuales</th><th>Cumplimiento histórico</th><th>Tiempo de entrega</th></tr></thead>
+      <tbody>${filasTalento}</tbody>
+    </table>
+    <p class="no-print" style="margin-top:24px;color:#666;font-size:12px;">Usa Ctrl+P (o Cmd+P) para guardar esta página como PDF.</p>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+function generarBriefTarea(tareaId){
+  const t = STATE.tareas.find(x=>x.id===tareaId);
+  if(!t) return;
+  const avances = avancesDe(t.id).filter(a=>a.autor!=='Sistema');
+  const html = `
+    <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Brief — ${t.titulo}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:40px;color:#111;max-width:700px;margin:0 auto;}
+      h1{font-size:20px;margin-bottom:4px;}
+      .sub{color:#666;font-size:13px;margin-bottom:24px;}
+      .row{display:flex;gap:20px;margin-bottom:10px;font-size:13px;}
+      .row b{width:140px;flex-shrink:0;}
+      .desc{margin-top:20px;font-size:13px;white-space:pre-wrap;background:#f7f7f7;padding:14px;border-radius:6px;}
+      .avances{margin-top:20px;}
+      .avance{border-bottom:1px solid #eee;padding:8px 0;font-size:12px;}
+      @media print{ .no-print{display:none;} }
+    </style></head><body>
+    <h1>LE COLLEZIONI · Brief de tarea</h1>
+    <div class="sub">Generado ${new Date().toLocaleDateString('es-CO')}</div>
+    <div class="row"><b>Título</b><span>${t.titulo}</span></div>
+    <div class="row"><b>Proyecto</b><span>${proyectoNombre(t.proyecto_id)}</span></div>
+    <div class="row"><b>Tipo</b><span>${t.tipo||'—'}</span></div>
+    <div class="row"><b>Asignado a</b><span>${talentoNombre(t.talento_id)}</span></div>
+    <div class="row"><b>Fecha de entrega</b><span>${fmtDate(t.fecha_entrega)}</span></div>
+    <div class="row"><b>Prioridad</b><span>${t.prioridad}</span></div>
+    <div class="row"><b>Estado actual</b><span>${LABELS_ESTADO[t.estado]||t.estado}</span></div>
+    ${t.descripcion?`<div class="desc">${t.descripcion}</div>`:''}
+    ${avances.length?`<div class="avances"><b>Avances registrados</b>${avances.map(a=>`<div class="avance">${fmtDate(a.created_at.slice(0,10))} — ${a.descripcion}</div>`).join('')}</div>`:''}
+    <p class="no-print" style="margin-top:24px;color:#666;font-size:12px;">Usa Ctrl+P (o Cmd+P) para imprimir o guardar como PDF.</p>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  w.document.write(html); w.document.close();
+}
+
+function descargarICS(t){
+  const fecha = t.fecha_entrega.replace(/-/g,'');
+  const ics = [
+    'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LE COLLEZIONI//Equipo Creativo//ES',
+    'BEGIN:VEVENT',
+    `UID:${t.id}@equipo-creativo`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z`,
+    `DTSTART;VALUE=DATE:${fecha}`,
+    `DTEND;VALUE=DATE:${fecha}`,
+    `SUMMARY:${(t.titulo||'').replace(/\n/g,' ')}`,
+    `DESCRIPTION:${(t.descripcion||'').replace(/\n/g,' ')} - Asignado a: ${talentoNombre(t.talento_id)}`,
+    'END:VEVENT','END:VCALENDAR'
+  ].join('\r\n');
+  const blob = new Blob([ics], {type:'text/calendar'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${(t.titulo||'tarea').replace(/[^a-z0-9]/gi,'-')}.ics`;
+  a.click();
+}
+
+function openMetaModal(){
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal">
+        <h3>Nueva meta</h3>
+        <div class="field"><label>Descripción</label><input id="f-desc" placeholder="Entregar 90% a tiempo este mes"></div>
+        <div class="field"><label>Aplica a talento</label>
+          <select id="f-talento"><option value="">— No aplica —</option>${STATE.talentos.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Aplica a proyecto</label>
+          <select id="f-proyecto"><option value="">— No aplica —</option>${STATE.proyectos.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Meta (%)</label><input type="number" id="f-pct" value="90" min="0" max="100"></div>
+        <div class="field"><label>Periodo (ej. 2026-08)</label><input id="f-periodo" placeholder="2026-08"></div>
+        <div class="modal-actions">
+          <button class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn" id="save">Guardar</button>
+        </div>
+      </div>
+    </div>`);
+  document.body.appendChild(overlay);
+  $('#cancel', overlay).onclick = ()=> overlay.remove();
+  $('#save', overlay).onclick = async ()=>{
+    const descripcion = $('#f-desc', overlay).value.trim();
+    if(!descripcion){ toast('La descripción es obligatoria'); return; }
+    const payload = {
+      descripcion,
+      talento_id: $('#f-talento', overlay).value || null,
+      proyecto_id: $('#f-proyecto', overlay).value || null,
+      meta_porcentaje: Number($('#f-pct', overlay).value) || 90,
+      periodo: $('#f-periodo', overlay).value.trim()
+    };
+    await supa.from('metas').insert(payload);
+    overlay.remove();
+    await loadAll(); renderAdminMetas();
+    toast('Meta guardada');
+  };
+}
+
+/* ---------------- BORRADO GENÉRICO ---------------- */
+async function deleteRow(table, id, refreshFn){
+  if(!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
+  await supa.from(table).delete().eq('id', id);
+  await loadAll();
+  refreshFn();
+  toast('Eliminado');
+}
+
+/* ---------------- LINKS Y RESPALDO ---------------- */
+function renderAdminLinks(){
+  const base = location.origin + location.pathname;
+  const view = $('#view-links');
+  view.innerHTML = `
+    <div class="section-title">Link para que otras áreas soliciten tareas</div>
+    <div class="list-row"><div class="flex-grow"><code style="font-size:12px;">${base}?solicitar=1</code></div>
+      <button class="btn small" id="copy-solicitar">Copiar</button></div>
+
+    <div class="section-title">Link de dirección (jefe)</div>
+    <div class="list-row"><div class="flex-grow"><code style="font-size:12px;">${base}?vista=jefe</code></div>
+      <button class="btn small" id="copy-jefe">Copiar</button></div>
+
+    <div class="section-title">Links por aprendiz</div>
+    <div id="links-aprendices"></div>
+
+    <div class="section-title">Reporte</div>
+    <button class="btn secondary" id="btn-reporte">Generar reporte mensual (imprimible / PDF)</button>
+
+    <div class="section-title">Respaldo</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn secondary" id="btn-export">Exportar JSON</button>
+      <label class="btn secondary" style="cursor:pointer;">Importar JSON<input type="file" id="file-import" accept=".json" class="hidden"></label>
+    </div>
+  `;
+  $('#copy-jefe').onclick = ()=>{ navigator.clipboard.writeText(base+'?vista=jefe'); toast('Link copiado'); };
+  $('#copy-solicitar').onclick = ()=>{ navigator.clipboard.writeText(base+'?solicitar=1'); toast('Link copiado'); };
+  $('#btn-reporte').onclick = generarReporteMensual;
+  const cont = $('#links-aprendices');
+  if(STATE.talentos.length===0){ cont.innerHTML = `<div class="empty-state">Crea talentos primero para generar sus links.</div>`; }
+  STATE.talentos.forEach(t=>{
+    const link = `${base}?aprendiz=${t.id}`;
+    cont.appendChild(el(`
+      <div class="list-row">
+        <div class="avatar">${t.avatar_inicial||initials(t.nombre)}</div>
+        <div class="flex-grow"><div class="person-name">${t.nombre}</div><code style="font-size:11px;color:var(--text-dim);word-break:break-all;">${link}</code></div>
+        <button class="btn small copy-link" data-link="${link}">Copiar</button>
+      </div>`));
+  });
+  cont.querySelectorAll('.copy-link').forEach(b=> b.onclick = ()=>{ navigator.clipboard.writeText(b.dataset.link); toast('Link copiado'); });
+
+  $('#btn-export').onclick = ()=>{
+    const data = { talentos: STATE.talentos, proyectos: STATE.proyectos, tareas: STATE.tareas, metas: STATE.metas, exportado: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `equipo-creativo-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  };
+  $('#file-import').onchange = async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const text = await file.text();
+    try{
+      const data = JSON.parse(text);
+      if(!confirm('Esto agregará los registros del archivo a la base de datos actual (no borra lo existente). ¿Continuar?')) return;
+      if(data.talentos) for(const t of data.talentos){ const {id,...rest}=t; await supa.from('talentos').insert(rest); }
+      if(data.proyectos) for(const p of data.proyectos){ const {id,...rest}=p; await supa.from('proyectos').insert(rest); }
+      // nota: tareas y metas dependen de ids nuevos, por eso solo se recomienda para proyectos/talentos en importaciones cruzadas
+      await loadAll();
+      renderAdminLinks();
+      toast('Importación completada (talentos y proyectos)');
+    }catch(err){ toast('Archivo inválido'); }
+  };
+}
+
+boot();
+</script>
+</body>
+</html>
