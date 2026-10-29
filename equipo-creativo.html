@@ -839,6 +839,121 @@ body.tiene-dock #pwa-bar{background:var(--glass-2);-webkit-backdrop-filter:blur(
 }
 @media(max-width:380px){.dock-btn{font-size:10px;}.dock-plus{width:48px;height:48px;}}
 @media print{.rail,.cmdbar,.dock{display:none !important;}.shell-main{margin:0;}}
+
+/* ============================================================
+   FLUJO POR ETAPAS · etapas, historial con hora, clave y revisión
+   ============================================================ */
+.nav-badge.verde{background:var(--verde);color:#fff;}
+
+/* Línea de etapas de cada tarea (vista del aprendiz) */
+.stepper{list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:18px 0 2px;padding:0;}
+.stepper .st{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0;color:var(--ink-3);}
+.stepper .st::before{content:'';position:absolute;top:11px;right:50%;width:100%;height:2px;background:var(--line-strong);opacity:.7;}
+.stepper .st:first-child::before{display:none;}
+.stepper .st.hecho::before{background:var(--verde);opacity:1;}
+.stepper .dot{position:relative;z-index:1;width:24px;height:24px;border-radius:50%;border:2px solid var(--line-strong);background:var(--glass-2);display:grid;place-items:center;color:#fff;box-sizing:border-box;}
+.stepper .hecho .dot{background:var(--verde);border-color:var(--verde);}
+.stepper .actual .dot{box-shadow:0 0 0 4px rgba(31,122,90,.20);}
+.stepper .dot .ico{width:12px;height:12px;stroke-width:2.4;vertical-align:0;}
+.stepper b{margin-top:6px;font-size:12.5px;font-weight:600;line-height:1.2;color:var(--ink-2);}
+.stepper .hecho b{color:var(--ink);}
+.stepper small{font-size:11.5px;line-height:1.3;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums;}
+.stepper small:first-of-type{margin-top:2px;}
+
+/* Botones de acción del aprendiz */
+.task-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;}
+.task-actions .btn{min-height:44px;}
+.task-actions .btn.small{min-height:40px;}
+.espera{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;color:var(--ink-2);}
+.aprobada-box{display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px 14px;border-radius:var(--r-sm);background:var(--ok-bg);color:var(--ok);}
+.aprobada-box .ico{width:20px;height:20px;stroke-width:2.2;vertical-align:0;}
+.aprobada-box div{display:flex;flex-direction:column;line-height:1.3;}
+.aprobada-box b{font-size:14.5px;} .aprobada-box span{font-size:13px;opacity:.9;}
+.devuelta-box{margin-top:14px;padding:12px 14px;border-radius:var(--r-sm);background:var(--danger-bg);color:var(--danger);display:grid;gap:2px;}
+.devuelta-box b{font-size:14.5px;} .devuelta-box span{font-size:12.5px;opacity:.9;}
+.devuelta-box p{margin:6px 0 0;color:var(--ink);font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
+.aviso-clave{display:flex;align-items:flex-start;gap:10px;margin:0 0 18px;padding:12px 14px;border-radius:var(--r-sm);background:var(--warn-bg);color:var(--warn);font-size:14px;line-height:1.45;}
+.aviso-clave .ico{margin-top:2px;}
+
+/* Historial con fecha y hora */
+details.hist{margin-top:14px;border-top:1px solid var(--line);padding-top:10px;}
+details.hist>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;color:var(--ink-2);min-height:32px;}
+details.hist>summary::-webkit-details-marker{display:none;}
+details.hist>summary::before{content:'';width:7px;height:7px;border-right:2px solid var(--ink-2);border-bottom:2px solid var(--ink-2);transform:rotate(-45deg);transition:transform .15s;margin:0 3px 0 2px;}
+details.hist[open]>summary::before{transform:rotate(45deg);}
+.tl{list-style:none;margin:10px 0 0;padding:0;}
+.tl-item{position:relative;display:flex;gap:12px;padding-bottom:14px;}
+.tl-item::before{content:'';position:absolute;left:5px;top:16px;bottom:-2px;width:2px;background:var(--line-strong);opacity:.6;}
+.tl-item:last-child{padding-bottom:0;} .tl-item:last-child::before{display:none;}
+.tl-dot{flex:0 0 12px;height:12px;margin-top:4px;border-radius:50%;background:var(--ink-3);position:relative;z-index:1;}
+.tl-item.k-estado .tl-dot,.tl-item.k-creada .tl-dot{background:var(--verde);}
+.tl-item.k-devuelta .tl-dot{background:var(--danger);}
+.tl-item.k-entrega .tl-dot{background:#c98a1a;}
+.tl-body{min-width:0;flex:1;}
+.tl-top{display:flex;justify-content:space-between;align-items:baseline;gap:4px 12px;flex-wrap:wrap;}
+.tl-top b{font-size:14px;font-weight:600;}
+.tl-top time{font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;}
+.tl-sub{font-size:12.5px;color:var(--ink-3);margin-top:1px;}
+.tl-txt{font-size:13.5px;line-height:1.45;margin-top:4px;white-space:pre-wrap;word-break:break-word;}
+.tl-file{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-size:13px;}
+
+/* Ventanas: clave y revisión */
+.mv-tarea{font-weight:600;margin:-6px 0 14px;line-height:1.35;}
+.field input.pin-input{font-size:28px;letter-spacing:.6em;text-indent:.6em;text-align:center;font-variant-numeric:tabular-nums;-webkit-text-security:disc;text-security:disc;height:56px;}
+.pin-row{display:flex;gap:10px;align-items:center;} .pin-row .pin-input{flex:1;min-width:0;}
+.chk{display:flex!important;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;font-weight:400!important;cursor:pointer;}
+.chk input{width:auto!important;height:auto!important;}
+.form-error{min-height:20px;margin-top:4px;font-size:13.5px;line-height:1.4;color:var(--danger);}
+.pin-grande{display:flex;justify-content:center;gap:10px;margin:6px 0 14px;}
+.pin-grande span{width:56px;height:68px;display:grid;place-items:center;font-size:34px;font-weight:600;border-radius:var(--r-sm);background:var(--sunken);font-variant-numeric:tabular-nums;}
+.rv-top{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:-6px 0 12px;}
+.rv-top b{font-size:16.5px;width:100%;} .rv-top>span:not(.pill){font-size:13.5px;color:var(--ink-2);}
+.rv-envio,.rv-aviso,.rv-link{font-size:14px;line-height:1.5;margin:0 0 12px;}
+.rv-envio .ico{margin-right:4px;} .rv-envio span{color:var(--ink-2);}
+.rv-envio .rv-ok{color:var(--ok);font-weight:600;} .rv-envio .rv-late,.rev-meta .rv-late{color:var(--danger);font-weight:600;}
+.rev-meta .rv-ok{color:var(--ok);font-weight:600;}
+.rv-aviso{color:var(--warn);background:var(--warn-bg);padding:10px 12px;border-radius:var(--r-sm);}
+
+/* Bandeja "Por revisar" */
+.rev-card{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;padding:18px 20px;margin-bottom:12px;background:var(--glass-2);border:1px solid var(--glass-line);border-radius:18px;box-shadow:0 8px 20px -14px rgba(60,40,20,.35);}
+.rev-main{min-width:0;flex:1;} .rev-main h4{font-size:17px;font-weight:600;line-height:1.3;}
+.rev-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;margin-top:8px;font-size:13.5px;color:var(--ink-2);}
+.rev-meta .ico{margin-right:2px;}
+.rev-nota{margin-top:10px;padding:10px 12px;border-radius:var(--r-sm);background:var(--sunken);font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
+.rev-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;flex:none;}
+.rev-vacio{display:flex;flex-direction:column;align-items:center;gap:6px;} .rev-vacio .ico{width:30px;height:30px;color:var(--verde);}
+.rev-vacio p{margin:0;line-height:1.5;}
+.rev-recientes{background:var(--glass);border:1px solid var(--glass-line);border-radius:var(--r-md);overflow:hidden;}
+.rev-reciente{width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;margin:0;cursor:pointer;font:inherit;color:inherit;background:transparent;}
+.rev-reciente:last-child{border-bottom:0;} .rev-reciente:hover{background:var(--sunken);}
+.rev-reciente b{display:block;font-size:14.5px;} .rev-hora{font-size:13px;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums;}
+.aviso-rev{display:flex;align-items:center;gap:12px;width:100%;margin:0 0 18px;padding:14px 18px;text-align:left;font:inherit;color:#fff;border:0;border-radius:18px;background:var(--hero);cursor:pointer;box-shadow:0 14px 30px -18px rgba(15,77,60,.7);}
+.aviso-rev .ico{width:20px;height:20px;flex:none;vertical-align:0;}
+.aviso-rev span:nth-child(2){flex:1;font-size:14px;line-height:1.4;opacity:.95;} .aviso-rev b{font-size:15px;margin-right:4px;}
+.aviso-rev .go{flex:none;font-weight:600;font-size:14px;}
+
+/* Sello de tiempo en las tarjetas del tablero */
+.kstamp{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:12px;line-height:1.3;color:var(--ink-2);font-variant-numeric:tabular-nums;}
+.kstamp .ico{width:13px;height:13px;vertical-align:0;}
+
+@media (max-width:900px){
+  .rev-card{flex-direction:column;gap:12px;padding:16px;} .rev-actions{justify-content:flex-start;width:100%;}
+  .rev-actions .btn{flex:1;min-height:44px;justify-content:center;}
+  .aviso-rev{flex-wrap:wrap;} .aviso-rev .go{width:100%;}
+}
+@media (max-width:900px){
+  #lista-talentos>.list-row .flex-grow{flex:1 1 calc(100% - 64px);min-width:0;}
+}
+@media (max-width:420px){
+  .stepper b{font-size:11.5px;} .stepper small{font-size:10.5px;}
+  .pin-grande span{width:48px;height:60px;font-size:30px;}
+}
+@media print{ .stepper,details.hist,.task-actions,.aviso-rev{display:none!important;} }
+
+/* Botón "Instalar app" del aprendiz */
+.inst-btn{gap:7px;white-space:nowrap;} .inst-btn .ico{width:15px;height:15px;vertical-align:0;}
+@media (max-width:560px){ .mb-apr{display:none;} }
+@media (min-width:821px){ body #pwa-bar{left:auto;right:24px;bottom:24px;width:min(460px,calc(100vw - 48px));} }
 </style>
 </head>
 <body>
@@ -994,20 +1109,12 @@ function avancesDe(tareaId){
   return STATE.avances.filter(a=>a.tarea_id===tareaId).sort((a,b)=> new Date(b.created_at)-new Date(a.created_at));
 }
 const LABELS_ESTADO = {pendiente:'Pendiente', en_progreso:'En progreso', en_revision:'En revisión', completada:'Completada', bloqueada:'Bloqueada'};
-async function registrarCambioEstado(tareaId, estadoAnterior, estadoNuevo, autor){
-  if(estadoAnterior===estadoNuevo) return;
-  await supa.from('avances').insert({
-    tarea_id: tareaId,
-    descripcion: `Estado cambiado: ${LABELS_ESTADO[estadoAnterior]||estadoAnterior} → ${LABELS_ESTADO[estadoNuevo]||estadoNuevo}`,
-    autor: autor || 'Sistema'
-  });
-}
 function tiempoPromedioEntrega(talentoId){
   const finalizadas = STATE.tareas.filter(t=>t.talento_id===talentoId && t.estado==='completada' && t.fecha_entrega);
   if(finalizadas.length===0) return null;
   const diffs = finalizadas.map(t=>{
     const entrega = new Date(t.fecha_entrega+'T23:59:59');
-    const completado = new Date(t.updated_at);
+    const completado = entregaRealDe(t) || new Date(t.updated_at);
     return (completado - entrega) / 86400000; // + tarde, - temprano
   });
   const prom = diffs.reduce((a,b)=>a+b,0)/diffs.length;
@@ -1034,7 +1141,7 @@ function cumplimientoDe(talentoId){
   if(finalizadas.length===0) return null;
   const aTiempo = finalizadas.filter(t=>{
     if(!t.fecha_entrega) return true;
-    return new Date(t.updated_at) <= new Date(t.fecha_entrega+'T23:59:59');
+    return (entregaRealDe(t) || new Date(t.updated_at)) <= new Date(t.fecha_entrega+'T23:59:59');
   });
   return Math.round((aTiempo.length/finalizadas.length)*100);
 }
@@ -1107,6 +1214,7 @@ async function tryAdminLogin(){
     const { data } = await supa.from('config').select('value').eq('key','admin_password_hash').single();
     const hash = await sha256Hex(val);
     if(data && hash === data.value){
+      STATE._adminHash = hash;
       await loadAll();
       renderAdminApp();
       subscribeRealtime(()=>{ if(STATE.mode==='admin') renderAdminTab(); });
@@ -1135,6 +1243,7 @@ async function loadAll(){
   STATE.metas = m.data || [];
   STATE.avances = av.data || [];
   STATE.solicitudes = so.data || [];
+  await cargarClaves();
 }
 
 function subscribeRealtime(cb){
@@ -1611,89 +1720,8 @@ function renderSolicitarView(){
 }
 
 /* ============================================================
-   VISTA APRENDIZ (solo lectura)
+   VISTA APRENDIZ (el módulo de abajo la reemplaza: mueve sus tareas con su clave)
    ============================================================ */
-function renderAprendizView(){
-  const talento = STATE.talentos.find(t=> t.id===STATE.talentoId || t.nombre.toLowerCase()===decodeURIComponent(STATE.talentoId).toLowerCase());
-  if(!talento){
-    $('#app').innerHTML = `<div class="gate"><div class="gate-card"><div class="crown-big">${logoHTML(44)}</div><h2>Link no válido</h2><p>No encontramos este acceso. Verifica tu link con el administrador.</p></div></div>`;
-    return;
-  }
-  if(talento.acceso_habilitado === false){
-    $('#app').innerHTML = `<div class="gate"><div class="gate-card"><div class="crown-big">${logoHTML(44)}</div><h2>Acceso desactivado</h2><p>Tu acceso a este panel fue desactivado. Contacta al administrador si crees que es un error.</p></div></div>`;
-    return;
-  }
-  const misTareas = STATE.tareas.filter(t=>t.talento_id===talento.id);
-  const activas = tareasActivasDe(talento.id).length;
-  const atrasadas = tareasAtrasadasDe(talento.id);
-  const cumpl = cumplimientoDe(talento.id);
-  const tProm = tiempoPromedioEntrega(talento.id);
-
-  // Lo urgente primero: atrasadas y de hoy, luego la semana, luego lo demás; lo completado queda plegado.
-  const hoy = hoyStr(), sem = rangoSemana(0);
-  const porFecha = (a,b)=> (a.fecha_entrega||'9999-12-31').localeCompare(b.fecha_entrega||'9999-12-31');
-  const grupos = {urgentes:[], semana:[], despues:[], hechas:[]};
-  misTareas.forEach(t=>{
-    if(t.estado==='completada') grupos.hechas.push(t);
-    else if(t.fecha_entrega && t.fecha_entrega<=hoy) grupos.urgentes.push(t);
-    else if(t.fecha_entrega && t.fecha_entrega<=sem.fin) grupos.semana.push(t);
-    else grupos.despues.push(t);
-  });
-  Object.values(grupos).forEach(g=>g.sort(porFecha));
-  grupos.hechas.reverse();
-
-  const tarjeta = t=>{
-    const proy = STATE.proyectos.find(p=>p.id===t.proyecto_id);
-    const hecha = t.estado==='completada';
-    const notas = avancesDe(t.id).filter(a=>!(a.descripcion||'').startsWith('Estado cambiado:'));
-    let due = '';
-    if(t.fecha_entrega){
-      const d = diasParaVencer(t), tarde = !hecha && isAtrasada(t);
-      let txt = fmtCorta(t.fecha_entrega);
-      if(!hecha){ if(tarde) txt = 'Atrasada · '+txt; else if(d===0) txt = 'Hoy'; else if(d===1) txt = 'Mañana'; }
-      due = `<span class="due ${tarde?'late':(!hecha&&d===0?'today':'')}">${txt}</span>`;
-    }
-    const prio = (t.prioridad==='alta'||t.prioridad==='urgente') && !hecha ? pillPrioridad(t.prioridad) : '';
-    return `<article class="task-card" style="${proy&&proy.color?`--brand:${proy.color};`:''}">
-      <div class="task-head"><h4>${esc(t.titulo)}</h4>${due}</div>
-      <div class="task-sub">${esc(proy?proy.nombre:'Sin proyecto')}${t.tipo?' · '+esc(t.tipo):''}</div>
-      ${t.descripcion?`<div class="task-desc">${esc(t.descripcion)}</div>`:''}
-      ${materialHTML(materialDeTarea(t), 'Material para trabajar')}
-      <div class="task-foot">${pillEstadoTarea(t)}${prio}${t.fecha_entrega && !hecha?`<button class="btn secondary small" data-ics="${t.id}">${ico('cal')} Agregar a calendario</button>`:''}</div>
-      ${notas.length?`<div class="task-notes">${notas.map(a=>`<div class="avance-item">${esc(a.descripcion)}<div class="meta-line">${esc(a.autor||'Administrador')} · ${fmtCorta(ymd(new Date(a.created_at)))}${a.archivo_url && urlSegura(a.archivo_url)?` · <a href="${esc(urlSegura(a.archivo_url))}" target="_blank" rel="noopener">Ver archivo</a>`:''}</div></div>`).join('')}</div>`:''}
-    </article>`;
-  };
-  const seccion = (titulo, lista)=> lista.length ? `<section><h3 class="group-title">${titulo}<span class="count">${lista.length}</span></h3>${lista.map(tarjeta).join('')}</section>` : '';
-  const cuerpo = misTareas.length===0
-    ? `<div class="empty-state" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);">Aún no tienes tareas asignadas. Cuando te asignen una, aparecerá aquí.</div>`
-    : seccion('Atrasadas y para hoy', grupos.urgentes) + seccion('Esta semana', grupos.semana) + seccion('Más adelante', grupos.despues)
-      + (grupos.hechas.length ? `<details class="done-group"><summary>Completadas<span class="count">${grupos.hechas.length}</span></summary><div class="task-list">${grupos.hechas.map(tarjeta).join('')}</div></details>` : '');
-
-  $('#app').innerHTML = `
-    <div class="topbar">
-      <div class="brand">${logoHTML(28)}<div class="sub">Mis tareas</div></div>
-      <div class="topbar-actions">${themeToggleHTML()}<span class="mode-badge">Vista aprendiz</span></div>
-    </div>
-    <main>
-      <span class="readonly-badge">${ico('lock')} Solo lectura</span>
-      <div class="profile-row">
-        <div class="avatar">${esc(talento.avatar_inicial || initials(talento.nombre))}</div>
-        <div>
-          <div class="person-name">${esc(talento.nombre)}</div>
-          <div class="person-role">${esc(talento.rol)}</div>
-        </div>
-      </div>
-      <div class="grid-cards">
-        <div class="card"><div class="label">Tareas activas</div><div class="value">${activas}</div></div>
-        <div class="card"><div class="label">Atrasadas</div><div class="value ${atrasadas>0?'danger':''}">${atrasadas}</div></div>
-        <div class="card"><div class="label">Cumplimiento</div><div class="value">${cumpl===null?'—':cumpl+'%'}</div></div>
-        <div class="card"><div class="label">Tiempo de entrega</div><div class="value" style="font-size:17px;line-height:1.3;">${labelTiempoPromedio(tProm)}</div></div>
-      </div>
-      <div id="mis-tareas">${cuerpo}</div>
-    </main>`;
-  document.querySelectorAll('[data-ics]').forEach(b=> b.onclick = ()=> descargarICS(misTareas.find(x=>x.id===b.dataset.ics)));
-}
-
 /* ============================================================
    VISTA JEFE (solo lectura, dashboard completo)
    ============================================================ */
@@ -1738,7 +1766,7 @@ function renderDashboardCards(sel){
   const completadas = STATE.tareas.filter(t=>t.estado==='completada');
   let cumplGeneral = '—';
   if(completadas.length>0){
-    const aTiempo = completadas.filter(t=> !t.fecha_entrega || new Date(t.updated_at) <= new Date(t.fecha_entrega+'T23:59:59'));
+    const aTiempo = completadas.filter(t=> !t.fecha_entrega || (entregaRealDe(t) || new Date(t.updated_at)) <= new Date(t.fecha_entrega+'T23:59:59'));
     cumplGeneral = Math.round((aTiempo.length/completadas.length)*100)+'%';
   }
   let mayorNombre = '—', mayorN = 0;
@@ -1958,6 +1986,7 @@ function renderKanban(sel, editable){
         <div class="kcard" draggable="${editable}" data-id="${t.id}" style="border-left:3px solid ${colorMarca};">
           <div class="t">${esc(t.titulo)}</div>
           <div class="kmeta"><span class="kdue ${isAtrasada(t)?'late':''}">${fmtCorta(t.fecha_entrega)}</span>${flags.join('')}</div>
+          ${selloKanban(t)}
           <div class="kfoot">${quien}</div>
         </div>`);
       if(editable){
@@ -1983,6 +2012,7 @@ function renderKanban(sel, editable){
         const id = e.dataTransfer.getData('text/plain');
         const tareaAntes = STATE.tareas.find(x=>x.id===id);
         const estadoAnterior = tareaAntes ? tareaAntes.estado : null;
+        if(col.key==='completada' && estadoAnterior!=='completada'){ abrirAprobacion(id); return; }
         await supa.from('tareas').update({estado:col.key, updated_at:new Date().toISOString()}).eq('id', id);
         await registrarCambioEstado(id, estadoAnterior, col.key);
         await loadAll(); renderAdminTab();
@@ -2175,6 +2205,7 @@ function renderAdminDashboard(){
   const hoyLargo = new Date().toLocaleDateString('es-CO',{weekday:'long', day:'numeric', month:'long'});
   $('#view-dashboard').innerHTML = `
     <div class="section-title hello"><span class="hello-kicker">${hoyLargo}</span><h1>${saludoHora()}, ${esc(NOMBRE_ADMIN)}</h1><p class="hello-sub">${resumenDia()}</p></div>
+    ${avisoRevision()}
     <div class="grid-cards" id="ad-cards"></div>
     <div class="charts-grid">
       <div class="chart-box"><h3>Carga por persona</h3><div class="chart-canvas"><canvas id="chart-carga-ad"></canvas></div></div>
@@ -2213,13 +2244,16 @@ function renderAdminTalentos(){
         <span class="pill dim">${t.estado}</span>
         <span class="pill ${carga.cls}">${carga.label} (${carga.n})</span>
         ${t.acceso_habilitado===false?'<span class="pill danger">Acceso revocado</span>':''}
+        ${pillClave(t)}
         <div class="row-actions">
+          <button class="btn secondary small" data-clave="${t.id}">${ico('lock')} Clave</button>
           <button class="btn secondary small" data-edit="${t.id}">Editar</button>
           <button class="btn danger small" data-del="${t.id}">Eliminar</button>
         </div>
       </div>`));
   });
   cont.querySelectorAll('[data-edit]').forEach(b=> b.onclick = ()=> openTalentoModal(b.dataset.edit));
+  cont.querySelectorAll('[data-clave]').forEach(b=> b.onclick = ()=> abrirModalClave(b.dataset.clave));
   cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('talentos', b.dataset.del, renderAdminTalentos));
 }
 
@@ -2281,7 +2315,7 @@ function mostrarLinkGenerado(talento){
     <div class="modal-overlay">
       <div class="modal">
         <h3>${talento.nombre} — link de acceso listo</h3>
-        <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">Comparte este link para que vea únicamente sus tareas (solo lectura):</p>
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">Comparte este link para que vea sus tareas y las mueva por etapas. Luego créale su clave de 4 dígitos en Talentos → Clave:</p>
         <div class="field"><input id="nuevo-link" value="${link}" readonly></div>
         <div class="modal-actions">
           <button class="btn secondary" id="close-link">Cerrar</button>
@@ -2609,21 +2643,6 @@ function renderListaTareas(){
   cont.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=> deleteRow('tareas', b.dataset.del, renderAdminTareas));
 }
 
-function renderAvancesModal(overlay, tareaId){
-  const cont = $('#avances-list', overlay);
-  if(!cont) return;
-  const avances = avancesDe(tareaId);
-  cont.innerHTML = avances.length? '' : `<div class="empty-state" style="padding:8px;">Sin avances registrados.</div>`;
-  avances.forEach(a=>{
-    cont.appendChild(el(`
-      <div class="avance-item">
-        ${a.descripcion}
-        <div class="meta-line">${a.autor||'Administrador'} · ${fmtDate(a.created_at.slice(0,10))}
-        ${a.archivo_url?` · <a href="${a.archivo_url}" target="_blank">Ver archivo</a>`:''}</div>
-      </div>`));
-  });
-}
-
 function openTareaModal(id, prefill){
   const t = id ? STATE.tareas.find(x=>x.id===id) : null;
   const pf = prefill || {};
@@ -2654,7 +2673,7 @@ function openTareaModal(id, prefill){
           <select id="f-prioridad">${PRIORIDADES.map(p=>`<option value="${p}" ${(t?t.prioridad===p:pf.prioridad===p)?'selected':''}>${p}</option>`).join('')}</select>
         </div>
         <div class="field"><label>Estado</label>
-          <select id="f-estado">${ESTADOS_TAREA.map(e=>`<option value="${e.key}" ${t&&t.estado===e.key?'selected':''}>${e.label}</option>`).join('')}</select>
+          <select id="f-estado">${ESTADOS_TAREA.filter(e=> e.key!=='completada' || (t && t.estado==='completada')).map(e=>`<option value="${e.key}" ${t&&t.estado===e.key?'selected':''}>${e.label}</option>`).join('')}</select>
         </div>
         </div>
         <div class="field"><label>Link del archivo final (al completar)</label><input id="f-link" value="${t?t.link_archivo||'':''}" placeholder="https://..."></div>
@@ -2664,9 +2683,7 @@ function openTareaModal(id, prefill){
         </div>
         ${t?`
         <div class="avance-form" style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${t.estado==='en_revision'?`
-          <button class="btn small ok" id="btn-aprobar">${ico('check')} Aprobar y completar</button>
-          <button class="btn danger small" id="btn-devolver">Devolver con comentario</button>`:''}
+          ${t.estado!=='completada'?`<button class="btn small ok" id="btn-revisar">${ico('check')} ${t.estado==='en_revision'?'Revisar entrega':'Aprobar y completar'}</button>`:''}
           <button class="btn secondary small" id="btn-imprimir-brief">${ico('print')} Imprimir brief</button>
           ${t.fecha_entrega?`<button class="btn secondary small" id="btn-ics">${ico('cal')} Agregar a calendario</button>`:''}
         </div>
@@ -2724,26 +2741,7 @@ function openTareaModal(id, prefill){
   if(t){
     $('#btn-imprimir-brief', overlay).onclick = ()=> generarBriefTarea(t.id);
     if($('#btn-ics', overlay)) $('#btn-ics', overlay).onclick = ()=> descargarICS(t);
-    if($('#btn-aprobar', overlay)){
-      $('#btn-aprobar', overlay).onclick = async ()=>{
-        await supa.from('tareas').update({estado:'completada', updated_at:new Date().toISOString()}).eq('id', t.id);
-        await registrarCambioEstado(t.id, t.estado, 'completada', 'Administrador (aprobado)');
-        overlay.remove();
-        await loadAll(); renderAdminTab();
-        toast('Tarea aprobada y completada');
-      };
-    }
-    if($('#btn-devolver', overlay)){
-      $('#btn-devolver', overlay).onclick = async ()=>{
-        const comentario = prompt('¿Qué hay que corregir? Este comentario quedará visible para el aprendiz.');
-        if(comentario===null) return;
-        await supa.from('tareas').update({estado:'en_progreso', updated_at:new Date().toISOString()}).eq('id', t.id);
-        await supa.from('avances').insert({tarea_id: t.id, descripcion: `Devuelto para corrección: ${comentario}`, autor:'Administrador'});
-        overlay.remove();
-        await loadAll(); renderAdminTab();
-        toast('Tarea devuelta con comentario');
-      };
-    }
+    if($('#btn-revisar', overlay)) $('#btn-revisar', overlay).onclick = ()=>{ overlay.remove(); abrirAprobacion(t.id); };
   }
   if(t){
     $('#btn-add-avance', overlay).onclick = async ()=>{
@@ -2764,7 +2762,7 @@ function openTareaModal(id, prefill){
           archivo_nombre = file.name;
         }
         await supa.from('avances').insert({
-          tarea_id: t.id, descripcion: desc, autor: 'Administrador',
+          tarea_id: t.id, descripcion: desc, autor: NOMBRE_ADMIN,
           archivo_url, archivo_nombre
         });
         await loadAll();
@@ -3080,13 +3078,19 @@ function renderAdminLinks(){
   window.esIOS = function(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); };
 
   window.mostrarAyudaInstalar = function(){
-    const ios = esIOS();
-    const pasos = ios
-      ? ['Abre esta página en <b>Safari</b> (no desde otra app).', 'Toca el botón <b>Compartir</b> (el cuadrado con la flecha hacia arriba).', 'Elige <b>«Añadir a pantalla de inicio»</b> y confirma con <b>Añadir</b>.']
-      : ['Abre esta página en <b>Chrome</b>.', 'Toca el menú <b>⋮</b> (arriba a la derecha).', 'Elige <b>«Instalar aplicación»</b> (o «Añadir a pantalla de inicio») y confirma.'];
-    const o = el(`<div class="modal-overlay" id="pwa-ayuda"><div class="modal"><h3>Instalar en el celular</h3>
+    const ua = navigator.userAgent, ios = esIOS(), android = /android/i.test(ua);
+    const edge = /edg\//i.test(ua), firefox = /firefox|fxios/i.test(ua);
+    const safariMac = !ios && !android && /Macintosh/.test(ua) && /safari/i.test(ua) && !/chrome|chromium|crios|edg\//i.test(ua);
+    let titulo, pasos;
+    if(ios){ titulo = 'Instalar en el iPhone o iPad'; pasos = ['Abre esta página en <b>Safari</b> (no desde otra app).', 'Toca el botón <b>Compartir</b> (el cuadrado con la flecha hacia arriba).', 'Elige <b>«Añadir a pantalla de inicio»</b> y confirma con <b>Añadir</b>.']; }
+    else if(android){ titulo = 'Instalar en el celular'; pasos = ['Abre esta página en <b>Chrome</b>.', 'Toca el menú <b>⋮</b> (arriba a la derecha).', 'Elige <b>«Instalar aplicación»</b> (o «Añadir a pantalla de inicio») y confirma.']; }
+    else if(firefox){ titulo = 'Instalar en el computador'; pasos = ['Firefox no instala aplicaciones en computador.', 'Abre este mismo link en <b>Google Chrome</b> o <b>Microsoft Edge</b> y sigue los pasos desde ahí.']; }
+    else if(safariMac){ titulo = 'Instalar en el Mac'; pasos = ['En el menú de arriba toca <b>Archivo</b>.', 'Elige <b>«Añadir al Dock…»</b> y confirma con <b>Añadir</b>.']; }
+    else if(edge){ titulo = 'Instalar en el computador'; pasos = ['Toca el menú <b>⋯</b> (arriba a la derecha).', 'Elige <b>Aplicaciones</b> → <b>«Instalar este sitio como una aplicación»</b>.', 'Confirma con <b>Instalar</b>.']; }
+    else { titulo = 'Instalar en el computador'; pasos = ['En <b>Google Chrome</b>, busca el icono de instalar (un monitor con una flecha) <b>al final de la barra de direcciones</b> y tócalo.', 'Si no lo ves: menú <b>⋮</b> → <b>«Instalar Equipo creativo»</b> (a veces está dentro de «Guardar y compartir»).', 'Confirma con <b>Instalar</b>. Queda con su ícono, como cualquier programa.']; }
+    const o = el(`<div class="modal-overlay" id="pwa-ayuda"><div class="modal"><h3>${titulo}</h3>
       <ol style="padding-left:20px;line-height:1.7;font-size:14px;">${pasos.map(p=>`<li>${p}</li>`).join('')}</ol>
-      <p class="hint">Se instala con el acceso del link que tienes abierto, así que ábrela con el tuyo. Después se abre a pantalla completa, como cualquier app, y se mantiene en línea.</p>
+      <p class="hint">Se instala con el acceso del link que tienes abierto, así que ábrela con el tuyo. Después se abre en su propia ventana o a pantalla completa, como cualquier app, y se mantiene en línea.</p>
       <div class="modal-actions"><button class="btn" id="pwa-ok">Entendido</button></div></div></div>`);
     document.body.appendChild(o);
     o.querySelector('#pwa-ok').onclick = ()=>o.remove();
@@ -3108,12 +3112,13 @@ function renderAdminLinks(){
   function mostrarBarraInstalar(){
     if(esStandalone() || document.getElementById('pwa-bar')) return;
     if(!['admin','aprendiz','jefe'].includes(STATE.mode)) return;
-    if(!(window.matchMedia && matchMedia('(max-width: 820px)').matches)) return;
+    const movil = !!(window.matchMedia && matchMedia('(max-width: 820px)').matches);
+    if(!movil && STATE.mode!=='aprendiz') return;   // en computador el aviso sale solo para los aprendices
     try{ const t = +localStorage.getItem('equipo_pwa_cerrada') || 0; if(Date.now() - t < 14*864e5) return; }catch(e){}
     const hayPrompt = !!(window.__pwa && window.__pwa.prompt);
     if(!hayPrompt && !esIOS()) return;
     const bar = el(`<div id="pwa-bar" role="region" aria-label="Instalar la app"><img src="icon-192.png" alt="">
-      <div class="tx"><b>Instala la app en tu celular</b><span>Pantalla completa y en línea</span></div>
+      <div class="tx"><b>Instala la app en tu ${movil?'celular':'computador'}</b><span>Pantalla completa y en línea</span></div>
       <button class="btn small" id="pwa-inst">Instalar</button><button class="x" id="pwa-x" aria-label="Cerrar">×</button></div>`);
     document.body.appendChild(bar);
     bar.querySelector('#pwa-inst').onclick = ()=>{ instalarApp(); };
@@ -3146,7 +3151,8 @@ function renderAdminLinks(){
    PANEL CRISTAL: menú lateral plegable, barra superior con buscador,
    dock inferior (celular), menú "Nuevo" y buscador tipo comando.
    ============================================================ */
-const NOMBRE_ADMIN = 'Jhojan';   // el saludo del panel usa este nombre; cámbialo si quieres
+const NOMBRE_ADMIN = 'Jefe';      // cómo se llama el administrador en el saludo, el historial y los mensajes
+const EL_JEFE = 'el jefe';        // el mismo nombre dentro de una frase ("pídele al jefe…")
 Object.assign(ICONS, {
   search:'<circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6L14 14"/>',
   plus:'<path d="M8 3v10M3 8h10"/>',
@@ -3154,7 +3160,8 @@ Object.assign(ICONS, {
   ajustes:'<path d="M2 4.5h7M12.5 4.5H14M2 11.5h1.5M7 11.5h7"/><circle cx="10.7" cy="4.5" r="1.7"/><circle cx="5.2" cy="11.5" r="1.7"/>',
   salir:'<path d="M6.5 2.5H4A1.5 1.5 0 002.5 4v8A1.5 1.5 0 004 13.5h2.5"/><path d="M10 5.2L12.8 8 10 10.8M12.8 8H6.5"/>',
   bell:'<path d="M4 11V7a4 4 0 118 0v4l1 1.5H3z"/><path d="M6.6 13.8a1.6 1.6 0 002.8 0"/>',
-  mas:'<circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/>'
+  mas:'<circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/>',
+  revision:'<path d="M4 2h5.5L13 5.5V14H4z"/><path d="M9.5 2v3.5H13"/><path d="M6.2 9.6l1.5 1.5 2.7-3"/>'
 });
 
 function saludoHora(){ const h = new Date().getHours(); return h<12 ? 'Buenos días' : (h<19 ? 'Buenas tardes' : 'Buenas noches'); }
@@ -3167,6 +3174,8 @@ function resumenDia(){
   const atras = STATE.tareas.filter(isAtrasada).length;
   const hoy = STATE.tareas.filter(t=> t.estado!=='completada' && !isAtrasada(t) && diasParaVencer(t)===0).length;
   const partes = [];
+  const rev = STATE.tareas.filter(t=>t.estado==='en_revision').length;
+  if(rev) partes.push(`${rev} entrega${rev===1?'':'s'} por revisar`);
   if(pend) partes.push(`${pend} solicitud${pend===1?'':'es'} por revisar`);
   if(atras) partes.push(`${atras} tarea${atras===1?'':'s'} atrasada${atras===1?'':'s'}`);
   if(hoy) partes.push(`${hoy} que vence${hoy===1?'':'n'} hoy`);
@@ -3208,12 +3217,12 @@ function abrirMenuNuevo(anchor){
   const pop = abrirPop(anchor, `<div class="pop-title">Crear</div>` + acc.map((a,i)=>`<button type="button" class="pop-item" data-i="${i}"><span class="ic">${ico(a.i)}</span>${esc(a.t)}</button>`).join(''));
   pop.querySelectorAll('.pop-item').forEach(b=> b.onclick = ()=>{ cerrarPops(); acc[+b.dataset.i].f(); });
 }
-const TABS_ADMIN = [['dashboard','Resumen'],['solicitudes','Solicitudes'],['kanban','Tablero'],['semanas','Semanas'],['calendario','Calendario'],['talentos','Talentos'],['proyectos','Proyectos'],['tareas','Tareas'],['metas','Metas'],['links','Links y respaldo']];
+const TABS_ADMIN = [['dashboard','Resumen'],['solicitudes','Solicitudes'],['revision','Por revisar'],['kanban','Tablero'],['semanas','Semanas'],['calendario','Calendario'],['talentos','Talentos'],['proyectos','Proyectos'],['tareas','Tareas'],['metas','Metas'],['links','Links y respaldo']];
 function abrirMenuMas(anchor){
   const enDock = ['dashboard','solicitudes','kanban','tareas'];
   const otras = TABS_ADMIN.filter(([k])=>!enDock.includes(k));
   const html = `<div class="pop-title">Más secciones</div>`
-    + otras.map(([k,l])=>`<button type="button" class="pop-item${STATE.activeTab===k?' activo':''}" data-k="${k}"><span class="ic">${ico(k)}</span>${esc(l)}</button>`).join('')
+    + otras.map(([k,l])=>{ const n = k==='revision' ? STATE.tareas.filter(t=>t.estado==='en_revision').length : 0; return `<button type="button" class="pop-item${STATE.activeTab===k?' activo':''}" data-k="${k}"><span class="ic">${ico(k)}</span>${esc(l)}${n?`<span class="nav-badge verde" style="margin-left:auto;position:static;">${n}</span>`:''}</button>`; }).join('')
     + `<button type="button" class="pop-item" data-k="_tema"><span class="ic">${ico('moon')}</span>Tema</button>`
     + `<button type="button" class="pop-item" data-k="_salir"><span class="ic">${ico('salir')}</span>Salir</button>`;
   const pop = abrirPop(anchor, html, 'malla');
@@ -3328,7 +3337,7 @@ function renderAdminApp(){
         </div>
         <nav class="rail-nav" aria-label="Secciones">
           <div class="rail-group"><div class="rail-label">Trabajo</div>
-            ${item('dashboard','Resumen')}${item('solicitudes','Solicitudes')}${item('kanban','Tablero')}${item('semanas','Semanas')}${item('calendario','Calendario')}
+            ${item('dashboard','Resumen')}${item('solicitudes','Solicitudes')}${item('revision','Por revisar','verde')}${item('kanban','Tablero')}${item('semanas','Semanas')}${item('calendario','Calendario')}
           </div>
           <div class="rail-group"><div class="rail-label">Equipo</div>
             ${item('talentos','Talentos')}${item('proyectos','Proyectos')}${item('tareas','Tareas','danger')}${item('metas','Metas')}
@@ -3358,6 +3367,7 @@ function renderAdminApp(){
         <main>
           <div class="view" id="view-dashboard"></div>
           <div class="view" id="view-solicitudes"></div>
+          <div class="view" id="view-revision"></div>
           <div class="view" id="view-kanban"></div>
           <div class="view" id="view-semanas"></div>
           <div class="view" id="view-calendario"></div>
@@ -3370,7 +3380,7 @@ function renderAdminApp(){
       </div>
       <nav class="dock" aria-label="Secciones">
         ${dk('dashboard','Resumen')}${dk('solicitudes','Solicitudes')}${dk('kanban','Tablero')}${dk('tareas','Tareas','danger')}
-        <button type="button" class="dock-btn" id="dock-mas" aria-label="Más secciones">${ico('mas','dock-ico')}<span>Más</span></button>
+        <button type="button" class="dock-btn" id="dock-mas" aria-label="Más secciones">${ico('mas','dock-ico')}<span>Más</span><span class="nav-badge verde" id="dbadge-mas"></span></button>
         <button type="button" class="dock-plus" id="dock-nuevo" aria-label="Crear">${ico('plus')}</button>
       </nav>
     </div>`;
@@ -3398,6 +3408,8 @@ function renderAdminTab(){
   const atras = STATE.tareas.filter(isAtrasada).length;
   setBadge('badge-solicitudes', pend); setBadge('dbadge-solicitudes', pend); setBadge('bell-n', pend);
   setBadge('badge-tareas', atras); setBadge('dbadge-tareas', atras);
+  const porRev = STATE.tareas.filter(t=>t.estado==='en_revision').length;
+  setBadge('badge-revision', porRev); setBadge('dbadge-mas', porRev);
   const sec = $('#cmd-seccion'); if(sec){ const t = TABS_ADMIN.find(x=>x[0]===act); sec.textContent = t ? t[1] : ''; }
   document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
   const view = $('#view-'+act);
@@ -3408,6 +3420,7 @@ function renderAdminTab(){
 
   if(act==='dashboard') renderAdminDashboard();
   if(act==='solicitudes') renderAdminSolicitudes();
+  if(act==='revision') renderAdminRevision();
   if(act==='kanban') renderAdminKanbanTab();
   if(act==='semanas') renderAdminSemanas();
   if(act==='calendario') renderCalendario();
@@ -3417,6 +3430,537 @@ function renderAdminTab(){
   if(act==='metas') renderAdminMetas();
   if(act==='links') renderAdminLinks();
 }
+
+/* ============================================================
+   FLUJO POR ETAPAS
+   El aprendiz mueve su tarea (con su clave de 4 dígitos):
+   Pendiente → En progreso → En revisión.
+   Solo el administrador la aprueba (Completada).
+   Cada paso guarda fecha y hora, en hora de Colombia.
+   ============================================================ */
+const ZONA_CO = 'America/Bogota';
+const ETAPAS = [['pendiente','Pendiente'],['en_progreso','En progreso'],['en_revision','En revisión'],['completada','Aprobada']];
+const CLAVE_DE_ETIQUETA = {'Pendiente':'pendiente','En progreso':'en_progreso','En revisión':'en_revision','Completada':'completada','Bloqueada':'bloqueada'};
+Object.assign(ICONS,{descargar:'<path d="M8 2.5v7.5M4.8 7.2L8 10.4l3.2-3.2M3 13h10"/>'});
+const ETIQUETA_DE_CLAVE = {pendiente:'Pendiente', en_progreso:'En progreso', en_revision:'En revisión', completada:'Completada', bloqueada:'Bloqueada'};
+
+/* ---------- fechas y horas (siempre hora de Colombia) ---------- */
+function _sinEspaciosRaros(s){ return String(s).replace(/[\u202f\u00a0]/g,' '); }
+function diaCO(iso){ return new Date(iso).toLocaleDateString('en-CA',{timeZone:ZONA_CO}); }
+function horaCO(iso){ return _sinEspaciosRaros(new Date(iso).toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:ZONA_CO})); }
+function diaCortoCO(iso){
+  const d = diaCO(iso), hoy = diaCO(new Date().toISOString()), ayer = diaCO(new Date(Date.now()-864e5).toISOString());
+  if(d===hoy) return 'hoy';
+  if(d===ayer) return 'ayer';
+  const op = {weekday:'short', day:'numeric', month:'short', timeZone:ZONA_CO};
+  if(d.slice(0,4)!==hoy.slice(0,4)) op.year = 'numeric';
+  return _sinEspaciosRaros(new Date(iso).toLocaleDateString('es-CO',op)).replace(/[.,]/g,'').replace(/\s+/g,' ').trim();
+}
+function momentoCO(iso){ return iso ? `${diaCortoCO(iso)} · ${horaCO(iso)}` : '—'; }
+function haceCO(iso){
+  const m = Math.round((Date.now()-new Date(iso).getTime())/60000);
+  if(m<1) return 'hace un momento';
+  if(m<60) return `hace ${m} min`;
+  const h = Math.floor(m/60); if(h<24) return `hace ${h} h`;
+  return `hace ${Math.floor(h/24)} d`;
+}
+function duracionCO(ms){
+  const m = Math.round(ms/60000);
+  if(m<1) return 'menos de 1 min';
+  if(m<60) return `${m} min`;
+  const h = Math.floor(m/60), mm = m%60;
+  if(h<24) return mm ? `${h} h ${mm} min` : `${h} h`;
+  const d = Math.floor(h/24), hh = h%24;
+  return hh ? `${d} d ${hh} h` : `${d} d`;
+}
+
+/* ---------- historial de una tarea, leído de los avances ---------- */
+function eventosDe(t){
+  const ev = [];
+  if(t.created_at) ev.push({k:'creada', iso:t.created_at, autor:'', a:'pendiente', txt:'', url:''});
+  STATE.avances.filter(x=>x.tarea_id===t.id).forEach(x=>{
+    const d = x.descripcion || '';
+    const e = {iso:x.created_at, autor:x.autor||'', url:x.archivo_url||'', txt:'', id:x.id};
+    let m;
+    if((m = /^Estado cambiado:\s*(.+?)\s*→\s*(.+?)\s*$/.exec(d))){ e.k='estado'; e.de = CLAVE_DE_ETIQUETA[m[1]]||m[1]; e.a = CLAVE_DE_ETIQUETA[m[2]]||m[2]; }
+    else if(/^Devuelto para corrección:/.test(d)){ e.k='devuelta'; e.txt = d.replace(/^Devuelto para corrección:\s*/,''); }
+    else if(/^Nota de entrega:/.test(d)){ e.k='entrega'; e.txt = d.replace(/^Nota de entrega:\s*/,''); }
+    else if(/^Observación de la revisión:/.test(d)){ e.k='obs'; e.txt = d.replace(/^Observación de la revisión:\s*/,''); }
+    else { e.k='nota'; e.txt = d; }
+    ev.push(e);
+  });
+  return ev.sort((a,b)=> new Date(a.iso)-new Date(b.iso));
+}
+function ultimoEvento(ev, fn){ for(let i=ev.length-1;i>=0;i--) if(fn(ev[i])) return ev[i]; return null; }
+function autorVisible(e){ const a = String(e.autor||'').replace(/\s*\((aprob[óo]|aprobado)\)\s*$/i,'').trim(); return /^jhojan\b/i.test(a) ? NOMBRE_ADMIN : a; }   // los registros viejos que dicen "Jhojan" se muestran como "Jefe"
+function tituloEvento(e){
+  if(e.k==='creada') return 'Tarea creada';
+  if(e.k==='estado'){
+    if(e.a==='completada') return 'Aprobada';
+    if(e.a==='en_revision') return 'Enviada a revisión';
+    if(e.a==='en_progreso') return e.de==='pendiente' ? 'Empezó (En progreso)' : (e.de==='en_revision' ? 'Volvió a En progreso' : 'Pasó a En progreso');
+    return 'Pasó a ' + (ETIQUETA_DE_CLAVE[e.a]||e.a);
+  }
+  if(e.k==='devuelta') return 'Devuelta para corregir';
+  if(e.k==='entrega') return 'Nota de entrega';
+  if(e.k==='obs') return 'Observación de la revisión';
+  return 'Nota';
+}
+function lineaTiempoHTML(t){
+  const ev = eventosDe(t);
+  if(!ev.length) return '<div class="empty-state" style="padding:8px;">Sin movimientos todavía.</div>';
+  let prev = null;
+  return '<ol class="tl">' + ev.map(e=>{
+    const sub = [];
+    const a = autorVisible(e);
+    if(a && a!=='Sistema' && !(e.k==='estado' && e.a==='completada')) sub.push('por ' + esc(a));
+    if(prev && ['estado','devuelta'].includes(e.k)){ const ms = new Date(e.iso)-new Date(prev.iso); if(ms>=60000) sub.push('tras ' + duracionCO(ms)); }
+    if(['estado','creada','devuelta'].includes(e.k)) prev = e;
+    const archivo = e.url && urlSegura(e.url) ? `<a class="tl-file" href="${esc(urlSegura(e.url))}" target="_blank" rel="noopener">${ico('link')} Ver archivo</a>` : '';
+    return `<li class="tl-item k-${e.k}"><span class="tl-dot"></span><div class="tl-body">
+      <div class="tl-top"><b>${esc(tituloEvento(e))}</b><time datetime="${esc(e.iso)}">${esc(momentoCO(e.iso))}</time></div>
+      ${sub.length?`<div class="tl-sub">${sub.join(' · ')}</div>`:''}
+      ${e.txt?`<div class="tl-txt">${esc(e.txt)}</div>`:''}${archivo}
+    </div></li>`;
+  }).join('') + '</ol>';
+}
+// Cuándo entregó de verdad el aprendiz: la última vez que envió a revisión (no cuándo aprobaste tú).
+function entregaRealDe(t){
+  const ev = eventosDe(t).filter(e=>e.k==='estado');
+  const fin = ultimoEvento(ev, e=>e.a==='completada');
+  const env = ultimoEvento(ev, e=>e.a==='en_revision' && (!fin || new Date(e.iso)<=new Date(fin.iso)));
+  if(env) return new Date(env.iso);
+  if(fin) return new Date(fin.iso);
+  return t.updated_at ? new Date(t.updated_at) : null;
+}
+function etapasDe(t){
+  const ev = eventosDe(t);
+  const act = Math.max(0, ETAPAS.findIndex(([k])=>k===t.estado));
+  return ETAPAS.map(([k,l],i)=>{
+    const e = k==='pendiente' ? ev.find(x=>x.k==='creada') : ultimoEvento(ev, x=>x.k==='estado' && x.a===k);
+    const alcanzada = i<=act;
+    return {k, l, alcanzada, actual:i===act, iso: alcanzada && e ? e.iso : null};
+  });
+}
+function stepperHTML(t){
+  return '<ol class="stepper" aria-label="Etapas de la tarea">' + etapasDe(t).map(s=>{
+    const check = s.alcanzada && (!s.actual || s.k==='completada');
+    return `<li class="st${s.alcanzada?' hecho':''}${s.actual?' actual':''}"><span class="dot">${check?ico('check'):''}</span><b>${s.l}</b>${s.iso?`<small>${esc(diaCortoCO(s.iso))}</small><small>${esc(horaCO(s.iso))}</small>`:'<small>&nbsp;</small><small>&nbsp;</small>'}</li>`;
+  }).join('') + '</ol>';
+}
+
+/* ---------- claves de aprendiz ---------- */
+async function cargarClaves(){
+  if(STATE.mode!=='admin' && STATE.mode!=='aprendiz') return;
+  try{ const r = await supa.rpc('claves_estado'); STATE.clavesOk = !r.error; STATE.claves = (r && r.data) || []; }
+  catch(e){ STATE.clavesOk = false; STATE.claves = []; }
+}
+function tieneClave(id){ return Array.isArray(STATE.claves) && STATE.claves.includes(id); }
+function claveGuardada(id){
+  try{ const g = sessionStorage.getItem('equipo_pin_'+id) || localStorage.getItem('equipo_pin_'+id); if(g) return g; }catch(e){}
+  return (STATE._pins && STATE._pins[id]) || '';
+}
+function guardarClave(id, pin, recordar){
+  STATE._pins = STATE._pins || {}; STATE._pins[id] = pin;
+  try{ sessionStorage.setItem('equipo_pin_'+id, pin); if(recordar) localStorage.setItem('equipo_pin_'+id, pin); }catch(e){}
+}
+function olvidarClave(id){
+  if(STATE._pins) delete STATE._pins[id];
+  try{ sessionStorage.removeItem('equipo_pin_'+id); localStorage.removeItem('equipo_pin_'+id); }catch(e){}
+}
+function soloDigitos(input){ input.addEventListener('input', ()=>{ input.value = input.value.replace(/\D/g,'').slice(0,4); }); }
+function textoErrorMovimiento(r){
+  switch(r && r.error){
+    case 'clave': return `Clave incorrecta. Te ${r.restantes===1?'queda':'quedan'} ${r.restantes} intento${r.restantes===1?'':'s'}.`;
+    case 'bloqueado': return `Demasiados intentos. Vuelve a intentar en ${r.minutos} min, o pídele al jefe que restablezca tu clave.`;
+    case 'sin_clave': return `Aún no tienes clave. Pídele al jefe que te la cree.`;
+    case 'link': return 'El link debe empezar por https:// y no tener espacios.';
+    case 'tarea': case 'transicion': return 'Esta tarea cambió mientras tanto. Ya actualicé la lista; revisa y vuelve a intentar.';
+    case 'acceso': return `Tu acceso está desactivado. Habla con el jefe.`;
+    case 'falta': return 'Esta función todavía no está activada en Supabase (falta correr la migración v8).';
+    default: return 'No se pudo guardar. Revisa tu conexión e intenta de nuevo.';
+  }
+}
+async function llamarMover(talento, t, destino, pin, nota, link){
+  try{
+    const r = await supa.rpc('aprendiz_mover_tarea', {p_talento:talento.id, p_pin:pin, p_tarea:t.id, p_estado:destino, p_nota:nota||null, p_link:link||null});
+    if(r.error){
+      const falta = /PGRST202|42883|could not find the function|does not exist/i.test((r.error.code||'')+' '+(r.error.message||''));
+      return {ok:false, error: falta ? 'falta' : 'red'};
+    }
+    return r.data || {ok:false, error:'red'};
+  }catch(e){ return {ok:false, error:'red'}; }
+}
+function mensajeExitoMovimiento(t, destino){
+  const ahora = new Date().toISOString();
+  if(destino==='en_revision') return `Enviada a revisión (${momentoCO(ahora)}). El jefe la revisará.`;
+  if(t.estado==='en_revision') return `Retirada de revisión (${momentoCO(ahora)}).`;
+  return `Empezaste esta tarea (${momentoCO(ahora)}).`;
+}
+function iniciarMovimiento(talento, tareaId, destino){
+  const t = STATE.tareas.find(x=>x.id===tareaId); if(!t) return;
+  const pin = claveGuardada(talento.id);
+  if(destino==='en_revision' || !pin){ abrirModalMovimiento(talento, t, destino); return; }
+  llamarMover(talento, t, destino, pin, '', '').then(async r=>{
+    if(r.ok){ await loadAll(); renderAprendizView(); toast(esc(mensajeExitoMovimiento(t, destino))); return; }
+    if(r.error==='clave') olvidarClave(talento.id);
+    if(r.error==='tarea' || r.error==='transicion'){ await loadAll(); renderAprendizView(); toast(esc(textoErrorMovimiento(r))); return; }
+    abrirModalMovimiento(talento, t, destino, textoErrorMovimiento(r));
+  });
+}
+function abrirModalMovimiento(talento, t, destino, errorInicial){
+  document.querySelectorAll('.modal-overlay.mv').forEach(x=>x.remove());
+  const entrega = destino==='en_revision';
+  const pinGuardado = claveGuardada(talento.id);
+  const titulo = entrega ? 'Enviar a revisión' : (t.estado==='en_revision' ? 'Retirar de revisión' : 'Empezar tarea');
+  const boton  = entrega ? 'Enviar a revisión' : (t.estado==='en_revision' ? 'Retirar' : 'Empezar');
+  const ov = el(`<div class="modal-overlay mv"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(titulo)}">
+    <h3>${esc(titulo)}</h3>
+    <p class="mv-tarea">${esc(t.titulo)}</p>
+    ${entrega ? `<div class="field"><label for="mv-nota">Nota para el jefe (opcional)</label><textarea id="mv-nota" maxlength="800" placeholder="Qué hiciste y qué debe revisar…"></textarea></div>
+    <div class="field"><label for="mv-link">Link del archivo final (opcional)</label><input id="mv-link" type="url" inputmode="url" autocomplete="off" placeholder="https://…"></div>` : ''}
+    ${pinGuardado ? '' : `<div class="field"><label for="mv-pin">Tu clave de 4 dígitos</label><input id="mv-pin" class="pin-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="••••"><label class="chk"><input type="checkbox" id="mv-rec"> Recordar en este celular</label></div>`}
+    <div class="form-error" id="mv-error" role="alert">${esc(errorInicial||'')}</div>
+    <div class="modal-actions"><button type="button" class="btn secondary" id="mv-cancel">Cancelar</button><button type="button" class="btn" id="mv-ok">${esc(boton)}</button></div>
+  </div></div>`);
+  document.body.appendChild(ov);
+  const pinEl = $('#mv-pin', ov), err = $('#mv-error', ov), ok = $('#mv-ok', ov);
+  if(pinEl) soloDigitos(pinEl);
+  ov.addEventListener('input', ()=>{ err.textContent = ''; });
+  $('#mv-cancel', ov).onclick = ()=> ov.remove();
+  ov.addEventListener('mousedown', e=>{ if(e.target===ov) ov.remove(); });
+  const enviar = async ()=>{
+    const pin = pinGuardado || (pinEl ? pinEl.value : '');
+    if(!/^\d{4}$/.test(pin)){ err.textContent = 'Escribe tu clave de 4 dígitos.'; if(pinEl) pinEl.focus(); return; }
+    const nota = $('#mv-nota', ov) ? $('#mv-nota', ov).value.trim() : '';
+    const link = $('#mv-link', ov) ? $('#mv-link', ov).value.trim() : '';
+    err.textContent = ''; ok.disabled = true; const txt = ok.textContent; ok.textContent = 'Guardando…';
+    const r = await llamarMover(talento, t, destino, pin, nota, link);
+    if(r.ok){
+      guardarClave(talento.id, pin, !!($('#mv-rec', ov) && $('#mv-rec', ov).checked));
+      ov.remove(); await loadAll(); renderAprendizView(); toast(esc(mensajeExitoMovimiento(t, destino))); return;
+    }
+    if(r.error==='clave'){
+      olvidarClave(talento.id);
+      if(pinGuardado){ ov.remove(); abrirModalMovimiento(talento, t, destino, textoErrorMovimiento(r)); return; }
+      if(pinEl){ pinEl.value=''; pinEl.focus(); }
+    }
+    if(r.error==='tarea' || r.error==='transicion'){ ov.remove(); await loadAll(); renderAprendizView(); toast(esc(textoErrorMovimiento(r))); return; }
+    err.textContent = textoErrorMovimiento(r); ok.disabled = false; ok.textContent = txt;
+  };
+  ok.onclick = enviar;
+  ov.addEventListener('keydown', e=>{ if(e.key==='Enter' && e.target.tagName!=='TEXTAREA'){ e.preventDefault(); enviar(); } else if(e.key==='Escape') ov.remove(); });
+  setTimeout(()=>{ const f = pinEl || $('#mv-nota', ov) || ok; if(f && f.focus) f.focus(); }, 60);
+}
+
+/* ---------- vista del aprendiz ---------- */
+function accionesAprendizHTML(t, talento, puedeMover){
+  const e = t.estado;
+  if(e==='completada'){
+    const ap = ultimoEvento(eventosDe(t), x=>x.k==='estado' && x.a==='completada');
+    return ap ? `<div class="aprobada-box">${ico('check')}<div><b>Aprobada</b><span>${esc(momentoCO(ap.iso))}</span></div></div>` : '';
+  }
+  if(!puedeMover) return '';
+  if(e==='pendiente')   return `<div class="task-actions"><button type="button" class="btn" data-mover="${t.id}" data-a="en_progreso">Empezar</button></div>`;
+  if(e==='en_progreso') return `<div class="task-actions"><button type="button" class="btn" data-mover="${t.id}" data-a="en_revision">Enviar a revisión</button></div>`;
+  if(e==='en_revision') return `<div class="task-actions"><span class="espera">${ico('clock')} Esperando revisión del jefe</span><button type="button" class="btn secondary small" data-mover="${t.id}" data-a="en_progreso">Retirar de revisión</button></div>`;
+  return '';
+}
+function devueltaPendiente(t){
+  if(t.estado!=='en_progreso') return null;
+  const ev = eventosDe(t);
+  const dev = ultimoEvento(ev, e=>e.k==='devuelta');
+  if(!dev) return null;
+  const env = ultimoEvento(ev, e=>e.k==='estado' && e.a==='en_revision');
+  return (!env || new Date(dev.iso) >= new Date(env.iso)) ? dev : null;
+}
+
+function renderAprendizView(){
+  const talento = STATE.talentos.find(t=> t.id===STATE.talentoId || t.nombre.toLowerCase()===decodeURIComponent(STATE.talentoId).toLowerCase());
+  if(!talento){
+    $('#app').innerHTML = `<div class="gate"><div class="gate-card"><div class="crown-big">${logoHTML(44)}</div><h2>Link no válido</h2><p>No encontramos este acceso. Verifica tu link con el administrador.</p></div></div>`;
+    return;
+  }
+  if(talento.acceso_habilitado === false){
+    $('#app').innerHTML = `<div class="gate"><div class="gate-card"><div class="crown-big">${logoHTML(44)}</div><h2>Acceso desactivado</h2><p>Tu acceso a este panel fue desactivado. Contacta al administrador si crees que es un error.</p></div></div>`;
+    return;
+  }
+  const misTareas = STATE.tareas.filter(t=>t.talento_id===talento.id);
+  const activas = tareasActivasDe(talento.id).length;
+  const atrasadas = tareasAtrasadasDe(talento.id);
+  const cumpl = cumplimientoDe(talento.id);
+  const tProm = tiempoPromedioEntrega(talento.id);
+  const puedeMover = !!STATE.clavesOk && tieneClave(talento.id);
+  const porRevisar = misTareas.filter(t=>t.estado==='en_revision').length;
+
+  const hoy = hoyStr(), sem = rangoSemana(0);
+  const porFecha = (a,b)=> (a.fecha_entrega||'9999-12-31').localeCompare(b.fecha_entrega||'9999-12-31');
+  const grupos = {urgentes:[], semana:[], despues:[], hechas:[]};
+  misTareas.forEach(t=>{
+    if(t.estado==='completada') grupos.hechas.push(t);
+    else if(t.fecha_entrega && t.fecha_entrega<=hoy) grupos.urgentes.push(t);
+    else if(t.fecha_entrega && t.fecha_entrega<=sem.fin) grupos.semana.push(t);
+    else grupos.despues.push(t);
+  });
+  Object.values(grupos).forEach(g=>g.sort(porFecha));
+  grupos.hechas.reverse();
+  STATE._histAbiertos = STATE._histAbiertos || new Set();
+
+  const tarjeta = t=>{
+    const proy = STATE.proyectos.find(p=>p.id===t.proyecto_id);
+    const hecha = t.estado==='completada';
+    const notas = eventosDe(t).filter(e=>e.k==='nota' || e.k==='obs').reverse();
+    const dev = devueltaPendiente(t);
+    let due = '';
+    if(t.fecha_entrega){
+      const d = diasParaVencer(t), tarde = !hecha && isAtrasada(t);
+      let txt = fmtCorta(t.fecha_entrega);
+      if(!hecha){ if(tarde) txt = 'Atrasada · '+txt; else if(d===0) txt = 'Hoy'; else if(d===1) txt = 'Mañana'; }
+      due = `<span class="due ${tarde?'late':(!hecha&&d===0?'today':'')}">${txt}</span>`;
+    }
+    const prio = (t.prioridad==='alta'||t.prioridad==='urgente') && !hecha ? pillPrioridad(t.prioridad) : '';
+    return `<article class="task-card" style="${proy&&proy.color?`--brand:${proy.color};`:''}">
+      <div class="task-head"><h4>${esc(t.titulo)}</h4>${due}</div>
+      <div class="task-sub">${esc(proy?proy.nombre:'Sin proyecto')}${t.tipo?' · '+esc(t.tipo):''}</div>
+      ${t.descripcion?`<div class="task-desc">${esc(t.descripcion)}</div>`:''}
+      ${materialHTML(materialDeTarea(t), 'Material para trabajar')}
+      ${dev?`<div class="devuelta-box" role="alert"><b>El jefe la devolvió para corregir</b><span>${esc(momentoCO(dev.iso))}</span><p>${esc(dev.txt)}</p></div>`:''}
+      ${stepperHTML(t)}
+      ${accionesAprendizHTML(t, talento, puedeMover)}
+      <div class="task-foot">${pillEstadoTarea(t)}${prio}${t.fecha_entrega && !hecha?`<button class="btn secondary small" data-ics="${t.id}">${ico('cal')} Agregar a calendario</button>`:''}</div>
+      ${notas.length?`<div class="task-notes">${notas.map(a=>`<div class="avance-item">${esc(a.txt)}<div class="meta-line">${esc(autorVisible(a)||'Administrador')} · ${esc(momentoCO(a.iso))}${a.url && urlSegura(a.url)?` · <a href="${esc(urlSegura(a.url))}" target="_blank" rel="noopener">Ver archivo</a>`:''}</div></div>`).join('')}</div>`:''}
+      <details class="hist" data-hist="${t.id}"${STATE._histAbiertos.has(t.id)?' open':''}><summary>Historial con fecha y hora</summary>${lineaTiempoHTML(t)}</details>
+    </article>`;
+  };
+  const seccion = (titulo, lista)=> lista.length ? `<section><h3 class="group-title">${titulo}<span class="count">${lista.length}</span></h3>${lista.map(tarjeta).join('')}</section>` : '';
+  const cuerpo = misTareas.length===0
+    ? `<div class="empty-state" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);">Aún no tienes tareas asignadas. Cuando te asignen una, aparecerá aquí.</div>`
+    : seccion('Atrasadas y para hoy', grupos.urgentes) + seccion('Esta semana', grupos.semana) + seccion('Más adelante', grupos.despues)
+      + (grupos.hechas.length ? `<details class="done-group"><summary>Aprobadas<span class="count">${grupos.hechas.length}</span></summary><div class="task-list">${grupos.hechas.map(tarjeta).join('')}</div></details>` : '');
+
+  const aviso = !STATE.clavesOk
+    ? `<div class="aviso-clave">${ico('lock')}<span>Para mover tus tareas falta activar la clave en Supabase. Avísale al jefe.</span></div>`
+    : (!tieneClave(talento.id) ? `<div class="aviso-clave">${ico('lock')}<span>Aún no tienes clave. Pídele al jefe que te cree tu clave de 4 dígitos para poder empezar y enviar tus tareas.</span></div>` : '');
+
+  $('#app').innerHTML = `
+    <div class="topbar">
+      <div class="brand">${logoHTML(28)}<div class="sub">Mis tareas</div></div>
+      <div class="topbar-actions">${esStandalone() ? '' : `<button type="button" class="btn small inst-btn" id="apr-instalar" aria-label="Instalar la app en este dispositivo">${ico('descargar')}<span>Instalar app</span></button>`}${themeToggleHTML()}<span class="mode-badge mb-apr">Vista aprendiz</span></div>
+    </div>
+    <main>
+      <span class="readonly-badge">${ico('check')} Tú mueves la tarea, el jefe la aprueba</span>
+      <div class="profile-row">
+        <div class="avatar">${esc(talento.avatar_inicial || initials(talento.nombre))}</div>
+        <div>
+          <div class="person-name">${esc(talento.nombre)}</div>
+          <div class="person-role">${esc(talento.rol)}</div>
+        </div>
+      </div>
+      ${aviso}
+      <div class="grid-cards">
+        <div class="card"><div class="label">Tareas activas</div><div class="value">${activas}</div></div>
+        <div class="card"><div class="label">Atrasadas</div><div class="value ${atrasadas>0?'danger':''}">${atrasadas}</div></div>
+        <div class="card"><div class="label">Cumplimiento</div><div class="value">${cumpl===null?'—':cumpl+'%'}</div></div>
+        <div class="card"><div class="label">Tiempo de entrega</div><div class="value" style="font-size:17px;line-height:1.3;">${labelTiempoPromedio(tProm)}</div></div>
+      </div>
+      <div id="mis-tareas">${cuerpo}</div>
+    </main>`;
+  document.querySelectorAll('[data-ics]').forEach(b=> b.onclick = ()=> descargarICS(misTareas.find(x=>x.id===b.dataset.ics)));
+  document.querySelectorAll('[data-mover]').forEach(b=> b.onclick = ()=> iniciarMovimiento(talento, b.dataset.mover, b.dataset.a));
+  const bInst = $('#apr-instalar'); if(bInst) bInst.onclick = ()=> instalarApp();
+  document.querySelectorAll('details.hist').forEach(d=> d.addEventListener('toggle', ()=>{ if(d.open) STATE._histAbiertos.add(d.dataset.hist); else STATE._histAbiertos.delete(d.dataset.hist); }));
+}
+
+/* ---------- administrador: revisar y aprobar ---------- */
+async function registrarCambioEstado(tareaId, estadoAnterior, estadoNuevo, autor){
+  if(estadoAnterior===estadoNuevo) return;
+  await supa.from('avances').insert({
+    tarea_id: tareaId,
+    descripcion: `Estado cambiado: ${LABELS_ESTADO[estadoAnterior]||estadoAnterior} → ${LABELS_ESTADO[estadoNuevo]||estadoNuevo}`,
+    autor: autor || (STATE.mode==='admin' ? NOMBRE_ADMIN : 'Sistema')
+  });
+}
+function textoPuntualidad(t, envioIso){
+  if(!t.fecha_entrega || !envioIso) return '';
+  const dias = Math.round((new Date(diaCO(envioIso)+'T00:00:00') - new Date(t.fecha_entrega+'T00:00:00'))/864e5);
+  if(dias<=0) return 'a tiempo';
+  return `${dias} día${dias===1?'':'s'} después de la fecha de entrega`;
+}
+function abrirAprobacion(tareaId){
+  const t = STATE.tareas.find(x=>x.id===tareaId); if(!t) return;
+  document.querySelectorAll('.modal-overlay.rv').forEach(x=>x.remove());
+  const ev = eventosDe(t);
+  const enRev = t.estado==='en_revision';
+  const envio = ultimoEvento(ev, e=>e.k==='estado' && e.a==='en_revision');
+  const entrega = envio ? ultimoEvento(ev, e=>e.k==='entrega' && new Date(e.iso) >= new Date(envio.iso)-5000) : null;
+  const link = t.link_archivo && urlSegura(t.link_archivo) ? urlSegura(t.link_archivo) : '';
+  const punt = enRev && envio ? textoPuntualidad(t, envio.iso) : '';
+  const ov = el(`<div class="modal-overlay rv"><div class="modal" role="dialog" aria-modal="true" aria-label="Revisar entrega">
+    <h3>${enRev?'Revisar entrega':'Aprobar tarea'}</h3>
+    <div class="rv-top"><b>${esc(t.titulo)}</b><span>${esc(talentoNombre(t.talento_id))} · ${esc(proyectoNombre(t.proyecto_id))}</span>${pillEstadoTarea(t)}</div>
+    ${enRev && envio ? `<p class="rv-envio">${ico('clock')} Enviada <b>${esc(momentoCO(envio.iso))}</b> <span>(${esc(haceCO(envio.iso))})</span>${punt?` · <span class="${punt==='a tiempo'?'rv-ok':'rv-late'}">${esc(punt)}</span>`:''}</p>` : ''}
+    ${!enRev ? `<p class="rv-aviso">Esta tarea no está «En revisión» (está en ${esc(ETIQUETA_DE_CLAVE[t.estado]||t.estado)}). Puedes aprobarla igual; quedará registrado que la aprobaste ahora.</p>` : ''}
+    ${entrega ? `<div class="avance-item"><b>Nota del aprendiz</b><br>${esc(entrega.txt)}</div>` : ''}
+    ${link ? `<p class="rv-link"><a href="${esc(link)}" target="_blank" rel="noopener">${ico('link')} Abrir el archivo entregado</a></p>` : (enRev ? '<p class="rv-aviso">El aprendiz no dejó link del archivo.</p>' : '')}
+    <div class="field"><label for="rv-obs">Observación ${enRev?'(opcional si apruebas, obligatoria si devuelves)':'(opcional)'}</label><textarea id="rv-obs" maxlength="800" placeholder="Qué te pareció, qué corregir…"></textarea></div>
+    <div class="form-error" id="rv-error" role="alert"></div>
+    <div class="modal-actions"><button type="button" class="btn secondary" id="rv-cancel">Cancelar</button>${enRev?'<button type="button" class="btn danger" id="rv-devolver">Devolver con comentario</button>':''}<button type="button" class="btn ok" id="rv-aprobar">${ico('check')} Aprobar y completar</button></div>
+  </div></div>`);
+  document.body.appendChild(ov);
+  const err = $('#rv-error', ov), obsEl = $('#rv-obs', ov);
+  const ocupado = v=> ov.querySelectorAll('button').forEach(b=> b.disabled = v);
+  $('#rv-cancel', ov).onclick = ()=> ov.remove();
+  ov.addEventListener('mousedown', e=>{ if(e.target===ov) ov.remove(); });
+  ov.addEventListener('keydown', e=>{ if(e.key==='Escape') ov.remove(); });
+  const terminar = async (msg)=>{ ov.remove(); await loadAll(); renderAdminTab(); toast(msg); };
+  $('#rv-aprobar', ov).onclick = async ()=>{
+    const obs = obsEl.value.trim(); ocupado(true);
+    const u = await supa.from('tareas').update({estado:'completada', updated_at:new Date().toISOString()}).eq('id', t.id);
+    if(u && u.error){ err.textContent = 'No se pudo aprobar: ' + u.error.message; ocupado(false); return; }
+    await supa.from('avances').insert({tarea_id:t.id, descripcion:`Estado cambiado: ${LABELS_ESTADO[t.estado]||t.estado} → Completada`, autor:`${NOMBRE_ADMIN} (aprobó)`});
+    if(obs) await supa.from('avances').insert({tarea_id:t.id, descripcion:`Observación de la revisión: ${obs}`, autor:NOMBRE_ADMIN});
+    await terminar('Tarea aprobada (' + momentoCO(new Date().toISOString()) + ')');
+  };
+  const dv = $('#rv-devolver', ov);
+  if(dv) dv.onclick = async ()=>{
+    const obs = obsEl.value.trim();
+    if(!obs){ err.textContent = 'Escribe qué hay que corregir: el aprendiz lo verá.'; obsEl.focus(); return; }
+    ocupado(true);
+    const u = await supa.from('tareas').update({estado:'en_progreso', updated_at:new Date().toISOString()}).eq('id', t.id);
+    if(u && u.error){ err.textContent = 'No se pudo devolver: ' + u.error.message; ocupado(false); return; }
+    await supa.from('avances').insert({tarea_id:t.id, descripcion:`Devuelto para corrección: ${obs}`, autor:NOMBRE_ADMIN});
+    await terminar('Tarea devuelta con tu comentario');
+  };
+  setTimeout(()=> obsEl.focus(), 60);
+}
+function avisoRevision(){
+  const n = STATE.tareas.filter(t=>t.estado==='en_revision').length;
+  if(!n) return '';
+  return `<button type="button" class="aviso-rev" onclick="irATab('revision')">${ico('revision')}<span><b>${n} entrega${n===1?'':'s'} por revisar</b> Tus aprendices las enviaron: apruébalas o devuélvelas.</span><span class="go">Revisar →</span></button>`;
+}
+function renderAdminRevision(){
+  const v = $('#view-revision'); if(!v) return;
+  const lista = STATE.tareas.filter(t=>t.estado==='en_revision').map(t=>{
+    const ev = eventosDe(t);
+    return {t, envio:ultimoEvento(ev, e=>e.k==='estado' && e.a==='en_revision'), entrega:ultimoEvento(ev, e=>e.k==='entrega')};
+  }).sort((a,b)=> new Date(a.envio?a.envio.iso:a.t.updated_at) - new Date(b.envio?b.envio.iso:b.t.updated_at));
+  const recientes = STATE.tareas.filter(t=>t.estado==='completada').map(t=>({t, ap:ultimoEvento(eventosDe(t), e=>e.k==='estado' && e.a==='completada')}))
+    .filter(x=>x.ap).sort((a,b)=> new Date(b.ap.iso)-new Date(a.ap.iso)).slice(0,8);
+  const card = ({t,envio,entrega})=>{
+    const punt = envio ? textoPuntualidad(t, envio.iso) : '';
+    const link = t.link_archivo && urlSegura(t.link_archivo) ? urlSegura(t.link_archivo) : '';
+    return `<article class="rev-card">
+      <div class="rev-main">
+        <h4>${esc(t.titulo)}</h4>
+        <div class="task-sub">${esc(talentoNombre(t.talento_id))} · ${esc(proyectoNombre(t.proyecto_id))}${t.fecha_entrega?' · Entrega '+esc(fmtCorta(t.fecha_entrega)):''}</div>
+        <div class="rev-meta">${ico('clock')} ${envio?`Enviada <b>${esc(momentoCO(envio.iso))}</b> <span>(${esc(haceCO(envio.iso))})</span>`:(t.updated_at?`En revisión desde <b>${esc(momentoCO(t.updated_at))}</b>`:'Enviada a revisión')}${punt?` · <span class="${punt==='a tiempo'?'rv-ok':'rv-late'}">${esc(punt)}</span>`:''}</div>
+        ${entrega && entrega.txt ? `<div class="rev-nota">${esc(entrega.txt)}</div>` : ''}
+      </div>
+      <div class="rev-actions">${link?`<a class="btn secondary small" href="${esc(link)}" target="_blank" rel="noopener">${ico('link')} Abrir archivo</a>`:''}<button type="button" class="btn small" data-revisar="${t.id}">Revisar</button></div>
+    </article>`;
+  };
+  v.innerHTML = `<div class="section-title">Por revisar <span class="page-sub">${lista.length} entrega${lista.length===1?'':'s'}</span></div>`
+    + (lista.length ? lista.map(card).join('') : `<div class="empty-state rev-vacio">${ico('revision')}<p><b>Nada por revisar.</b><br>Cuando un aprendiz envíe una tarea a revisión, aparece aquí con la fecha y hora del envío.</p></div>`)
+    + (recientes.length ? `<div class="section-title" style="margin-top:34px;">Aprobadas recientemente</div><div class="rev-recientes">${recientes.map(({t,ap})=>`<button type="button" class="list-row rev-reciente" data-abrir="${t.id}"><span class="flex-grow"><b>${esc(t.titulo)}</b><span class="task-sub">${esc(talentoNombre(t.talento_id))}</span></span><span class="rev-hora">${esc(momentoCO(ap.iso))}</span></button>`).join('')}</div>` : '');
+  v.querySelectorAll('[data-revisar]').forEach(b=> b.onclick = ()=> abrirAprobacion(b.dataset.revisar));
+  v.querySelectorAll('[data-abrir]').forEach(b=> b.onclick = ()=> openTareaModal(b.dataset.abrir));
+}
+function selloKanban(t){
+  if(t.estado==='pendiente') return '';
+  const e = ultimoEvento(eventosDe(t), x=>x.k==='estado' && x.a===t.estado);
+  if(!e) return '';
+  const verbo = t.estado==='completada' ? 'Aprobada' : (t.estado==='en_revision' ? 'Enviada' : 'Desde');
+  return `<div class="kstamp" title="${esc(momentoCO(e.iso))}">${ico('clock')}<span>${verbo} ${esc(momentoCO(e.iso))}</span></div>`;
+}
+function renderAvancesModal(overlay, tareaId){
+  const cont = $('#avances-list', overlay);
+  if(!cont) return;
+  const t = STATE.tareas.find(x=>x.id===tareaId);
+  cont.innerHTML = t ? lineaTiempoHTML(t) : '';
+}
+
+/* ---------- administrador: clave de cada aprendiz ---------- */
+function pillClave(t){
+  if(!STATE.clavesOk) return '';
+  return tieneClave(t.id) ? '<span class="pill ok">Clave creada</span>' : '<span class="pill warn">Sin clave</span>';
+}
+function baseLinkAprendiz(){ return location.origin + location.pathname.replace(/equipo-creativo-admin\.html$/,'equipo-creativo.html'); }
+function claveAleatoria(){
+  for(let i=0;i<20;i++){
+    const a = new Uint32Array(1); (window.crypto||window.msCrypto).getRandomValues(a);
+    const p = String(a[0]%10000).padStart(4,'0');
+    if(!/^(\d)\1{3}$/.test(p) && !'0123456789'.includes(p) && !'9876543210'.includes(p)) return p;
+  }
+  return '4827';
+}
+function abrirModalClave(id){
+  const t = STATE.talentos.find(x=>x.id===id); if(!t) return;
+  const tiene = tieneClave(id);
+  const pri = (t.nombre||'').split(' ')[0];
+  const ov = el(`<div class="modal-overlay"><div class="modal" role="dialog" aria-modal="true" aria-label="Clave de ${esc(t.nombre)}">
+    <h3>Clave de ${esc(t.nombre)}</h3>
+    <p class="hint" style="margin:-6px 0 14px;">Con su clave de 4 dígitos ${esc(pri)} puede empezar sus tareas y enviarlas a revisión. Aprobarlas lo haces solo tú.</p>
+    <p style="margin-bottom:14px;">${tiene?'<span class="pill ok">Ya tiene clave</span> <span class="hint">Si guardas otra, la anterior deja de servir.</span>':'<span class="pill warn">Todavía no tiene clave</span>'}</p>
+    <div class="field"><label for="cl-pin">Clave nueva (4 números)</label>
+      <div class="pin-row"><input id="cl-pin" class="pin-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" spellcheck="false" placeholder="••••"><button type="button" class="btn secondary small" id="cl-azar">Generar una</button></div>
+    </div>
+    <div class="form-error" id="cl-error" role="alert"></div>
+    <div class="modal-actions">${tiene?'<button type="button" class="btn danger cerrar-izq" id="cl-quitar">Quitar clave</button>':''}<button type="button" class="btn secondary" id="cl-cancel">Cancelar</button><button type="button" class="btn" id="cl-guardar">Guardar clave</button></div>
+  </div></div>`);
+  document.body.appendChild(ov);
+  const pinEl = $('#cl-pin', ov), err = $('#cl-error', ov);
+  soloDigitos(pinEl);
+  pinEl.addEventListener('input', ()=>{ err.textContent = ''; });
+  $('#cl-cancel', ov).onclick = ()=> ov.remove();
+  $('#cl-azar', ov).onclick = ()=>{ pinEl.value = claveAleatoria(); err.textContent=''; };
+  const llamar = async (pin)=>{
+    if(!STATE._adminHash){ return {ok:false, error:'sesion'}; }
+    try{
+      const r = await supa.rpc('admin_fijar_clave', {p_admin_hash:STATE._adminHash, p_talento:id, p_pin:pin});
+      if(r.error){ const falta = /PGRST202|42883|could not find the function|does not exist/i.test((r.error.code||'')+' '+(r.error.message||'')); return {ok:false, error: falta?'falta':'red'}; }
+      return r.data || {ok:false, error:'red'};
+    }catch(e){ return {ok:false, error:'red'}; }
+  };
+  const textoErr = r=> ({falta:'Falta correr la migración v8 en Supabase (archivo supabase-migracion-v8-claves.sql).', admin:'No pude confirmar tu contraseña de administrador. Sal y vuelve a entrar.', sesion:'Vuelve a entrar con tu contraseña de administrador y repite.', formato:'La clave debe tener exactamente 4 números.', talento:'No encontré a esta persona.'}[r.error] || 'No se pudo guardar. Revisa tu conexión.');
+  $('#cl-guardar', ov).onclick = async ()=>{
+    const pin = pinEl.value;
+    if(!/^\d{4}$/.test(pin)){ err.textContent = 'Escribe 4 números (o toca «Generar una»).'; pinEl.focus(); return; }
+    const r = await llamar(pin);
+    if(!r.ok){ err.textContent = textoErr(r); return; }
+    ov.remove(); await loadAll(); renderAdminTab(); mostrarClaveCreada(t, pin);
+  };
+  const q = $('#cl-quitar', ov);
+  if(q) q.onclick = async ()=>{
+    if(q.dataset.seguro!=='1'){ q.dataset.seguro='1'; q.textContent='¿Seguro? Toca otra vez'; return; }
+    const r = await llamar('');
+    if(!r.ok){ err.textContent = textoErr(r); return; }
+    ov.remove(); await loadAll(); renderAdminTab(); toast('Clave quitada: ' + esc(t.nombre) + ' ya no puede mover tareas');
+  };
+  setTimeout(()=> pinEl.focus(), 60);
+}
+function mostrarClaveCreada(t, pin){
+  const link = `${baseLinkAprendiz()}?aprendiz=${t.id}`;
+  const pri = (t.nombre||'').split(' ')[0];
+  const msg = `Hola ${pri}, este es tu acceso al panel de tareas del equipo creativo:\n${link}\nTu clave: ${pin}\nCon ella marcas «Empezar» y «Enviar a revisión» en tus tareas. Cuando la envías, yo la reviso y la apruebo.`;
+  const ov = el(`<div class="modal-overlay"><div class="modal" role="dialog" aria-modal="true" aria-label="Clave lista">
+    <h3>Clave lista para ${esc(pri)}</h3>
+    <div class="pin-grande" aria-label="Clave">${pin.split('').map(d=>`<span>${d}</span>`).join('')}</div>
+    <p class="hint" style="text-align:center;margin-bottom:14px;">Anótala o mándasela ahora. Por seguridad se guarda cifrada y no se vuelve a mostrar.</p>
+    <div class="field"><label for="cl-msg">Mensaje listo para enviar</label><textarea id="cl-msg" rows="6" readonly></textarea></div>
+    <div class="modal-actions"><button type="button" class="btn secondary" id="cl-cerrar">Cerrar</button><button type="button" class="btn" id="cl-copiar">Copiar mensaje</button></div>
+  </div></div>`);
+  document.body.appendChild(ov);
+  $('#cl-msg', ov).value = msg;
+  $('#cl-cerrar', ov).onclick = ()=> ov.remove();
+  $('#cl-copiar', ov).onclick = ()=>{
+    const ok = ()=> toast('Mensaje copiado');
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(msg).then(ok, ()=>{ $('#cl-msg', ov).select(); toast('Selecciónalo y copia'); });
+    else { $('#cl-msg', ov).select(); toast('Selecciónalo y copia'); }
+  };
+}
+
+// Cuando ya quedó instalada, desaparecen el botón y el aviso de instalar
+window.addEventListener('appinstalled', ()=>{ document.querySelectorAll('#apr-instalar,#pwa-bar').forEach(e=>e.remove()); });
 
 boot();
 </script>
