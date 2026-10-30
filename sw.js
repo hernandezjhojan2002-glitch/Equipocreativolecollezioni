@@ -2,7 +2,7 @@
    - Páginas (HTML): red primero, para que siempre veas la versión más nueva. Sin internet, muestra la última guardada.
    - Librerías (Supabase, Chart.js): se guardan para que la app abra rápido.
    - Supabase (datos, tiempo real, archivos): NUNCA se intercepta ni se guarda; los datos siempre vienen en vivo. */
-const VERSION = 'v5';
+const VERSION = 'v7';
 const PAGINAS = 'equipo-paginas-' + VERSION;
 const LIBS = 'equipo-libs-' + VERSION;
 const CDN = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com'];

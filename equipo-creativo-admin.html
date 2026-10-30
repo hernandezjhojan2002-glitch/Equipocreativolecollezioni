@@ -954,6 +954,71 @@ details.hist[open]>summary::before{transform:rotate(45deg);}
 .inst-btn{gap:7px;white-space:nowrap;} .inst-btn .ico{width:15px;height:15px;vertical-align:0;}
 @media (max-width:560px){ .mb-apr{display:none;} }
 @media (min-width:821px){ body #pwa-bar{left:auto;right:24px;bottom:24px;width:min(460px,calc(100vw - 48px));} }
+
+/* Menú lateral del administrador: todo cabe en pantallas normales y en laptops bajas; si no cabe, hay barra de desplazamiento visible */
+.rail-item{height:42px;}
+@media (max-height:820px){
+  .rail{gap:8px;padding:12px 10px 10px;}
+  .rail-profile{padding:6px 10px;} .rail-avatar{width:34px;height:34px;}
+  .rail-item{height:36px;} .rail-group{margin-bottom:4px;} .rail-label{padding:4px 14px 2px;}
+  .rail-act,.rail-act.theme-toggle{height:36px;} .rail-actions{padding-top:8px;}
+  .rail-nav{padding:0;}
+  body.rail-c .rail-item{height:32px;} body.rail-c .rail-act,body.rail-c .rail-act.theme-toggle{height:28px;} body.rail-c .rail-profile{padding:2px 0;}
+}
+@media (max-height:740px){
+  .rail-item{height:34px;font-size:14px;} .rail-label{display:none;} .rail-group{margin-bottom:2px;}
+}
+@media (max-height:680px){ .rail-item{height:32px;} }
+@media (max-height:780px){
+  .rail-nav{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent;}
+  .rail-nav::-webkit-scrollbar{display:block;width:5px;}
+  .rail-nav::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:5px;}
+}
+
+/* ============================================================
+   MIS PENDIENTES (solo el administrador)
+   ============================================================ */
+.pend-kicker{display:inline-flex;align-items:center;gap:6px;} .pend-kicker .ico{width:14px;height:14px;vertical-align:0;}
+.pend-add{display:grid;grid-template-columns:minmax(0,1fr) 160px 150px auto;gap:10px;margin:6px 0 4px;}
+.pend-add input,.pend-add select{width:100%;height:46px;padding:0 14px;background:var(--glass-2);border:1px solid var(--glass-line);border-radius:14px;font-size:15px;color:var(--ink);font-family:inherit;}
+.pend-add input:focus,.pend-add select:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px var(--ring);}
+.pend-add .btn{height:46px;padding:0 20px;gap:7px;} .pend-add .btn .ico{width:15px;height:15px;vertical-align:0;}
+.pend-add :disabled{opacity:.55;cursor:not-allowed;}
+#view-pendientes>.form-error{margin:0 0 6px;}
+.pend-tabs{display:inline-flex;gap:4px;padding:4px;margin:14px 0 12px;border-radius:999px;background:var(--glass-3);border:1px solid var(--glass-line);}
+.pend-tabs button{border:0;background:transparent;color:var(--ink-2);font:inherit;font-size:14px;font-weight:500;padding:0 16px;height:36px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
+.pend-tabs button span{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
+.pend-tabs button.on{background:var(--glass-2);color:var(--ink);box-shadow:0 1px 0 rgba(255,255,255,.8) inset,0 6px 14px -8px rgba(50,35,15,.45);}
+.pend-lista{list-style:none;margin:0;padding:0;display:grid;gap:10px;}
+.pend-item{display:flex;align-items:flex-start;gap:12px;padding:14px 14px 14px 10px;background:var(--glass-2);border:1px solid var(--glass-line);border-radius:18px;box-shadow:0 8px 20px -16px rgba(60,40,20,.35);}
+.pend-check{flex:none;width:44px;height:44px;margin:-6px 0 -6px -4px;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;border-radius:50%;}
+.pend-check-i{width:24px;height:24px;border-radius:50%;border:2px solid var(--line-strong);display:grid;place-items:center;color:transparent;transition:background-color .15s,border-color .15s,color .15s;}
+.pend-check-i .ico{width:13px;height:13px;stroke-width:2.6;vertical-align:0;}
+.pend-check:hover .pend-check-i{border-color:var(--verde);}
+.pend-item.hecha .pend-check-i{background:var(--verde);border-color:var(--verde);color:#fff;}
+.pend-main{min-width:0;flex:1;cursor:pointer;padding-top:1px;}
+.pend-titulo{font-size:15.5px;font-weight:600;line-height:1.35;word-break:break-word;}
+.pend-item.hecha .pend-titulo{text-decoration:line-through;color:var(--ink-2);font-weight:500;}
+.pend-nota{margin-top:3px;font-size:13.5px;line-height:1.45;color:var(--ink-2);white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.pend-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin-top:8px;} .pend-meta:empty{display:none;}
+.pend-prio{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);}
+.pend-prio i{width:8px;height:8px;border-radius:50%;background:var(--ink-3);}
+.pend-prio.alta i{background:var(--danger);} .pend-prio.media i{background:#c98a1a;}
+.pend-acts{flex:none;display:flex;gap:2px;margin:-4px -4px 0 0;}
+.pend-ib{width:40px;height:40px;border:0;background:transparent;border-radius:12px;color:var(--ink-3);display:grid;place-items:center;cursor:pointer;}
+.pend-ib:hover{background:var(--glass-3);color:var(--ink);} .pend-ib .ico{width:16px;height:16px;vertical-align:0;}
+.pend-vacio{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 16px;text-align:center;color:var(--ink-2);background:var(--glass);border:1px dashed var(--line-strong);border-radius:18px;}
+.pend-vacio .ico{width:28px;height:28px;color:var(--verde);} .pend-vacio p{margin:0;line-height:1.5;}
+.pend-aviso{padding:18px 20px;border-radius:18px;background:var(--warn-bg);color:var(--ink);display:grid;gap:8px;justify-items:start;line-height:1.5;}
+.pend-aviso b{font-size:16px;color:var(--warn);} .pend-aviso p{margin:0;} .pend-aviso ol{margin:0;padding-left:20px;} .pend-aviso code{font-size:12.5px;background:var(--sunken);padding:1px 6px;border-radius:6px;}
+.pend-priv{display:flex;align-items:flex-start;gap:8px;margin:22px 0 0;font-size:13px;line-height:1.5;color:var(--ink-3);} .pend-priv .ico{width:14px;height:14px;margin-top:2px;flex:none;vertical-align:0;}
+.pd-fila{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media (max-width:900px){
+  .pend-add{grid-template-columns:minmax(0,1fr) minmax(0,1fr);} .pend-add #pend-titulo{grid-column:1/-1;} .pend-add .btn{grid-column:1/-1;justify-content:center;}
+  .pend-item{padding:14px 10px 14px 8px;} .pend-ib{width:44px;height:44px;}
+}
+@media (max-width:420px){ .pd-fila{grid-template-columns:1fr;} }
+@media print{ #view-pendientes{display:none!important;} }
 </style>
 </head>
 <body>
@@ -1212,6 +1277,7 @@ async function tryAdminLogin(){
     const hash = await sha256Hex(val);
     if(data && hash === data.value){
       STATE._adminHash = hash;
+      STATE._adminPass = val;   // solo en memoria: abre la lista privada "Mis pendientes"
       await loadAll();
       renderAdminApp();
       subscribeRealtime(()=>{ if(STATE.mode==='admin') renderAdminTab(); });
@@ -1241,6 +1307,7 @@ async function loadAll(){
   STATE.avances = av.data || [];
   STATE.solicitudes = so.data || [];
   await cargarClaves();
+  if(STATE.mode==='admin' && Date.now() - (STATE._pendCargadoEn||0) > 60000) cargarPendientes();   // sin esperar
 }
 
 function subscribeRealtime(cb){
@@ -2998,9 +3065,9 @@ function renderAdminLinks(){
     <div class="section-title">Links por aprendiz</div>
     <div id="links-aprendices"></div>
 
-    <div class="section-title">Instalar en el celular</div>
-    <div class="list-row"><div class="flex-grow"><div class="person-name">App en la pantalla de inicio</div>
-      <div style="font-size:12px;color:var(--text-dim);" id="inst-texto">Se abre a pantalla completa y todo se mantiene en línea. Instálala desde el link que usas tú.</div></div>
+    <div class="section-title">Instalar la app</div>
+    <div class="list-row"><div class="flex-grow"><div class="person-name">En el computador o en el celular</div>
+      <div style="font-size:12px;color:var(--text-dim);" id="inst-texto">Se abre en su propia ventana (computador) o a pantalla completa (celular) y todo se mantiene en línea. Instálala desde el link que usas tú.</div></div>
       <button class="btn small" id="btn-instalar">Instalar</button></div>
 
     <div class="section-title">Reporte</div>
@@ -3176,6 +3243,8 @@ function resumenDia(){
   if(pend) partes.push(`${pend} solicitud${pend===1?'':'es'} por revisar`);
   if(atras) partes.push(`${atras} tarea${atras===1?'':'s'} atrasada${atras===1?'':'s'}`);
   if(hoy) partes.push(`${hoy} que vence${hoy===1?'':'n'} hoy`);
+  const pendU = pendUrg();
+  if(pendU) partes.push(`${pendU} pendiente${pendU===1?'':'s'} tuyo${pendU===1?'':'s'} para hoy o atrasado${pendU===1?'':'s'}`);
   if(!partes.length) return 'Todo al día: no hay solicitudes pendientes ni tareas atrasadas.';
   return 'Tienes ' + partes.join(', ').replace(/, ([^,]*)$/, ' y $1') + '.';
 }
@@ -3214,12 +3283,12 @@ function abrirMenuNuevo(anchor){
   const pop = abrirPop(anchor, `<div class="pop-title">Crear</div>` + acc.map((a,i)=>`<button type="button" class="pop-item" data-i="${i}"><span class="ic">${ico(a.i)}</span>${esc(a.t)}</button>`).join(''));
   pop.querySelectorAll('.pop-item').forEach(b=> b.onclick = ()=>{ cerrarPops(); acc[+b.dataset.i].f(); });
 }
-const TABS_ADMIN = [['dashboard','Resumen'],['solicitudes','Solicitudes'],['revision','Por revisar'],['kanban','Tablero'],['semanas','Semanas'],['calendario','Calendario'],['talentos','Talentos'],['proyectos','Proyectos'],['tareas','Tareas'],['metas','Metas'],['links','Links y respaldo']];
+const TABS_ADMIN = [['dashboard','Resumen'],['solicitudes','Solicitudes'],['revision','Por revisar'],['pendientes','Mis pendientes'],['kanban','Tablero'],['semanas','Semanas'],['calendario','Calendario'],['talentos','Talentos'],['proyectos','Proyectos'],['tareas','Tareas'],['metas','Metas'],['links','Links y respaldo']];
 function abrirMenuMas(anchor){
   const enDock = ['dashboard','solicitudes','kanban','tareas'];
   const otras = TABS_ADMIN.filter(([k])=>!enDock.includes(k));
   const html = `<div class="pop-title">Más secciones</div>`
-    + otras.map(([k,l])=>{ const n = k==='revision' ? STATE.tareas.filter(t=>t.estado==='en_revision').length : 0; return `<button type="button" class="pop-item${STATE.activeTab===k?' activo':''}" data-k="${k}"><span class="ic">${ico(k)}</span>${esc(l)}${n?`<span class="nav-badge verde" style="margin-left:auto;position:static;">${n}</span>`:''}</button>`; }).join('')
+    + otras.map(([k,l])=>{ const n = k==='revision' ? STATE.tareas.filter(t=>t.estado==='en_revision').length : (k==='pendientes' ? pendUrg() : 0); return `<button type="button" class="pop-item${STATE.activeTab===k?' activo':''}" data-k="${k}"><span class="ic">${ico(k)}</span>${esc(l)}${n?`<span class="nav-badge verde" style="margin-left:auto;position:static;">${n}</span>`:''}</button>`; }).join('')
     + `<button type="button" class="pop-item" data-k="_tema"><span class="ic">${ico('moon')}</span>Tema</button>`
     + `<button type="button" class="pop-item" data-k="_salir"><span class="ic">${ico('salir')}</span>Salir</button>`;
   const pop = abrirPop(anchor, html, 'malla');
@@ -3334,7 +3403,7 @@ function renderAdminApp(){
         </div>
         <nav class="rail-nav" aria-label="Secciones">
           <div class="rail-group"><div class="rail-label">Trabajo</div>
-            ${item('dashboard','Resumen')}${item('solicitudes','Solicitudes')}${item('revision','Por revisar','verde')}${item('kanban','Tablero')}${item('semanas','Semanas')}${item('calendario','Calendario')}
+            ${item('dashboard','Resumen')}${item('solicitudes','Solicitudes')}${item('revision','Por revisar','verde')}${item('pendientes','Mis pendientes')}${item('kanban','Tablero')}${item('semanas','Semanas')}${item('calendario','Calendario')}
           </div>
           <div class="rail-group"><div class="rail-label">Equipo</div>
             ${item('talentos','Talentos')}${item('proyectos','Proyectos')}${item('tareas','Tareas','danger')}${item('metas','Metas')}
@@ -3365,6 +3434,7 @@ function renderAdminApp(){
           <div class="view" id="view-dashboard"></div>
           <div class="view" id="view-solicitudes"></div>
           <div class="view" id="view-revision"></div>
+          <div class="view" id="view-pendientes"></div>
           <div class="view" id="view-kanban"></div>
           <div class="view" id="view-semanas"></div>
           <div class="view" id="view-calendario"></div>
@@ -3406,7 +3476,8 @@ function renderAdminTab(){
   setBadge('badge-solicitudes', pend); setBadge('dbadge-solicitudes', pend); setBadge('bell-n', pend);
   setBadge('badge-tareas', atras); setBadge('dbadge-tareas', atras);
   const porRev = STATE.tareas.filter(t=>t.estado==='en_revision').length;
-  setBadge('badge-revision', porRev); setBadge('dbadge-mas', porRev);
+  const pendU = pendUrg();
+  setBadge('badge-revision', porRev); setBadge('badge-pendientes', pendU); setBadge('dbadge-mas', porRev + pendU);
   const sec = $('#cmd-seccion'); if(sec){ const t = TABS_ADMIN.find(x=>x[0]===act); sec.textContent = t ? t[1] : ''; }
   document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
   const view = $('#view-'+act);
@@ -3418,6 +3489,7 @@ function renderAdminTab(){
   if(act==='dashboard') renderAdminDashboard();
   if(act==='solicitudes') renderAdminSolicitudes();
   if(act==='revision') renderAdminRevision();
+  if(act==='pendientes') renderAdminPendientes();
   if(act==='kanban') renderAdminKanbanTab();
   if(act==='semanas') renderAdminSemanas();
   if(act==='calendario') renderCalendario();
@@ -3565,7 +3637,10 @@ function olvidarClave(id){
   if(STATE._pins) delete STATE._pins[id];
   try{ sessionStorage.removeItem('equipo_pin_'+id); localStorage.removeItem('equipo_pin_'+id); }catch(e){}
 }
-function soloDigitos(input){ input.addEventListener('input', ()=>{ input.value = input.value.replace(/\D/g,'').slice(0,4); }); }
+function soloDigitos(input){
+  // los números se ocultan con CSS; si el navegador no lo soporta (p. ej. Firefox) se usa un campo de contraseña
+  try{ if(!(window.CSS && CSS.supports && CSS.supports('-webkit-text-security','disc'))) input.type = 'password'; }catch(_){ input.type = 'password'; }
+  input.addEventListener('input', ()=>{ input.value = input.value.replace(/\D/g,'').slice(0,4); }); }
 function textoErrorMovimiento(r){
   switch(r && r.error){
     case 'clave': return `Clave incorrecta. Te ${r.restantes===1?'queda':'quedan'} ${r.restantes} intento${r.restantes===1?'':'s'}.`;
@@ -3616,7 +3691,7 @@ function abrirModalMovimiento(talento, t, destino, errorInicial){
     <p class="mv-tarea">${esc(t.titulo)}</p>
     ${entrega ? `<div class="field"><label for="mv-nota">Nota para el jefe (opcional)</label><textarea id="mv-nota" maxlength="800" placeholder="Qué hiciste y qué debe revisar…"></textarea></div>
     <div class="field"><label for="mv-link">Link del archivo final (opcional)</label><input id="mv-link" type="url" inputmode="url" autocomplete="off" placeholder="https://…"></div>` : ''}
-    ${pinGuardado ? '' : `<div class="field"><label for="mv-pin">Tu clave de 4 dígitos</label><input id="mv-pin" class="pin-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="••••"><label class="chk"><input type="checkbox" id="mv-rec"> Recordar en este celular</label></div>`}
+    ${pinGuardado ? '' : `<div class="field"><label for="mv-pin">Tu clave de 4 dígitos</label><input id="mv-pin" class="pin-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="••••"><label class="chk"><input type="checkbox" id="mv-rec"> Recordar en este dispositivo</label></div>`}
     <div class="form-error" id="mv-error" role="alert">${esc(errorInicial||'')}</div>
     <div class="modal-actions"><button type="button" class="btn secondary" id="mv-cancel">Cancelar</button><button type="button" class="btn" id="mv-ok">${esc(boton)}</button></div>
   </div></div>`);
@@ -3894,7 +3969,7 @@ function abrirModalClave(id){
   const t = STATE.talentos.find(x=>x.id===id); if(!t) return;
   const tiene = tieneClave(id);
   const pri = (t.nombre||'').split(' ')[0];
-  const ov = el(`<div class="modal-overlay"><div class="modal" role="dialog" aria-modal="true" aria-label="Clave de ${esc(t.nombre)}">
+  const ov = el(`<div class="modal-overlay cl"><div class="modal" role="dialog" aria-modal="true" aria-label="Clave de ${esc(t.nombre)}">
     <h3>Clave de ${esc(t.nombre)}</h3>
     <p class="hint" style="margin:-6px 0 14px;">Con su clave de 4 dígitos ${esc(pri)} puede empezar sus tareas y enviarlas a revisión. Aprobarlas lo haces solo tú.</p>
     <p style="margin-bottom:14px;">${tiene?'<span class="pill ok">Ya tiene clave</span> <span class="hint">Si guardas otra, la anterior deja de servir.</span>':'<span class="pill warn">Todavía no tiene clave</span>'}</p>
@@ -3957,7 +4032,268 @@ function mostrarClaveCreada(t, pin){
 }
 
 // Cuando ya quedó instalada, desaparecen el botón y el aviso de instalar
+/* Escape cierra la ventana abierta aunque el foco no esté dentro de ella (no aplica a la que muestra la clave recién creada) */
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape' || e.defaultPrevented) return;
+  const m = [...document.querySelectorAll('.modal-overlay.mv,.modal-overlay.rv,.modal-overlay.cl,.modal-overlay.pd,#pwa-ayuda')].pop();
+  if(m){ e.preventDefault(); m.remove(); }
+});
 window.addEventListener('appinstalled', ()=>{ document.querySelectorAll('#apr-instalar,#pwa-bar').forEach(e=>e.remove()); });
+
+/* ============================================================
+   MIS PENDIENTES · solo para el administrador
+   Viven en una zona privada de Supabase (migración v9): se leen y se guardan con la
+   contraseña del administrador, que solo está en memoria. No forman parte de las tareas
+   del equipo, ni del link del jefe, ni del respaldo.
+   ============================================================ */
+Object.assign(ICONS,{
+  pendientes:'<rect x="3.2" y="7" width="9.6" height="6.6" rx="1.8"/><path d="M5.4 7V5.4a2.6 2.6 0 015.2 0V7"/><path d="M6.3 10.3l1.2 1.2 2.3-2.4"/>',
+  editar:'<path d="M3 13h2.3l7-7-2.3-2.3-7 7z"/><path d="M9 4.8l2.3 2.3"/>',
+  papelera:'<path d="M3.5 4.6h9M6.4 4.6V3.2h3.2v1.4M4.8 4.6l.5 8.4h5.4l.5-8.4"/>'
+});
+const PRIO_ETQ = {alta:'Alta', media:'Media', baja:'Baja'};
+const PRIO_ORD = {alta:0, media:1, baja:2};
+
+function hoyCO(){ return diaCO(new Date().toISOString()); }
+function diasEntreFechas(a, b){            // 'AAAA-MM-DD' → días de a a b
+  const [ya,ma,da] = a.split('-').map(Number), [yb,mb,db] = b.split('-').map(Number);
+  return Math.round((Date.UTC(yb,mb-1,db) - Date.UTC(ya,ma-1,da)) / 864e5);
+}
+function fechaLargaCO(f){
+  const [y,m,d] = f.split('-').map(Number);
+  const op = {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'};
+  if(String(y) !== hoyCO().slice(0,4)) op.year = 'numeric';
+  return _sinEspaciosRaros(new Date(Date.UTC(y,m-1,d,12)).toLocaleDateString('es-CO', op)).replace(/[.,]/g,'').replace(/\s+/g,' ').trim();
+}
+function normPend(x){
+  return {id:String(x.id), titulo:String(x.titulo||''), nota:String(x.nota||''), fecha:x.fecha||null,
+          prioridad:PRIO_ETQ[x.prioridad]?x.prioridad:'media', hecha:!!x.hecha, hecha_en:x.hecha_en||null, creada:x.creada||''};
+}
+function pendUrg(){                          // por hacer con fecha de hoy o anterior
+  if(!Array.isArray(STATE.pendientes)) return 0;
+  const h = hoyCO();
+  return STATE.pendientes.filter(p=> !p.hecha && p.fecha && p.fecha <= h).length;
+}
+function pendActualizarBadges(){
+  const pu = pendUrg(), porRev = Array.isArray(STATE.tareas) ? STATE.tareas.filter(t=>t.estado==='en_revision').length : 0;
+  setBadge('badge-pendientes', pu); setBadge('dbadge-mas', porRev + pu);
+  const hs = document.querySelector('#view-dashboard .hello-sub'); if(hs) hs.textContent = resumenDia();
+}
+function ordenarPend(a, b){
+  const fa = a.fecha || '9999-12-31', fb = b.fecha || '9999-12-31';
+  if(fa !== fb) return fa < fb ? -1 : 1;
+  if(PRIO_ORD[a.prioridad] !== PRIO_ORD[b.prioridad]) return PRIO_ORD[a.prioridad] - PRIO_ORD[b.prioridad];
+  return String(a.creada) < String(b.creada) ? -1 : 1;
+}
+function etiquetaFechaPend(p){
+  if(p.hecha) return p.hecha_en ? {txt:'Hecha · ' + momentoCO(p.hecha_en), cls:'ok'} : {txt:'Hecha', cls:'ok'};
+  if(!p.fecha) return null;
+  const d = diasEntreFechas(hoyCO(), p.fecha);
+  if(d < 0)   return {txt: d===-1 ? 'Atrasado · ayer' : `Atrasado · hace ${-d} d`, cls:'danger'};
+  if(d === 0) return {txt:'Vence hoy', cls:'warn'};
+  if(d === 1) return {txt:'Mañana', cls:'warn'};
+  return {txt:fechaLargaCO(p.fecha), cls:'dim'};
+}
+
+/* ---------- conexión con la zona privada ---------- */
+async function pendRPC(fn, args){
+  if(!STATE._adminPass) return {ok:false, error:'admin'};
+  try{
+    const r = await supa.rpc(fn, Object.assign({p_pass: STATE._adminPass}, args || {}));
+    if(r.error){
+      const m = String(r.error.message||'') + ' ' + String(r.error.code||'');
+      return /PGRST202|42883|could not find the function|schema cache/i.test(m) ? {ok:false, error:'migracion'} : {ok:false, error:'red'};
+    }
+    return r.data || {ok:false, error:'red'};
+  }catch(e){ return {ok:false, error:'red'}; }
+}
+async function cargarPendientes(){
+  if(STATE.mode !== 'admin' || !STATE._adminPass) return;
+  STATE._pendCargadoEn = Date.now();
+  const r = await pendRPC('jefe_pendientes_listar');
+  if(r.ok){ STATE.pendientes = (r.items || []).map(normPend); STATE._pendEstado = 'ok'; }
+  else { STATE._pendEstado = r.error || 'red'; STATE._pendMin = r.minutos; }
+  pendActualizarBadges();
+  if(STATE.activeTab === 'pendientes') pintarPendientes();
+}
+async function guardarPend(base, cambios){
+  const d = Object.assign({}, base, cambios);
+  return pendRPC('jefe_pendientes_guardar', {p_id: d.id || null, p_titulo: d.titulo, p_nota: d.nota || '', p_fecha: d.fecha || '', p_prioridad: d.prioridad || 'media', p_hecha: !!d.hecha});
+}
+function textoErrorPend(r){
+  switch(r && r.error){
+    case 'titulo':    return 'Escribe qué tienes pendiente (máximo 200 letras).';
+    case 'nota':      return 'La nota es muy larga (máximo 1000 letras).';
+    case 'fecha':     return 'La fecha no es válida.';
+    case 'prioridad': return 'La prioridad no es válida.';
+    case 'no_existe': return 'Ese pendiente ya no existe. Actualizo la lista.';
+    case 'bloqueado': return `Demasiados intentos con contraseña incorrecta. Espera ${r.minutos||15} min.`;
+    case 'admin':     return 'No pude confirmar tu contraseña. Sal del panel y vuelve a entrar.';
+    case 'migracion': return 'Falta correr el archivo v9 en Supabase (supabase-migracion-v9-pendientes.sql).';
+    default:          return 'No pude conectar. Revisa tu internet e intenta de nuevo.';
+  }
+}
+
+/* ---------- pantalla ---------- */
+function renderAdminPendientes(){
+  const v = $('#view-pendientes'); if(!v) return;
+  const b = STATE._pendBorrador || (STATE._pendBorrador = {titulo:'', fecha:'', prio:'media'});
+  v.innerHTML = `
+    <div class="section-title hello"><span class="hello-kicker pend-kicker">${ico('pendientes')} Solo tú los ves</span><h1>Mis pendientes</h1><p class="hello-sub" id="pend-sub"></p></div>
+    <form class="pend-add" id="pend-form" autocomplete="off">
+      <input id="pend-titulo" type="text" maxlength="200" placeholder="¿Qué tienes pendiente? Escríbelo y presiona Enter" aria-label="Nuevo pendiente" value="${esc(b.titulo)}">
+      <input id="pend-fecha" type="date" aria-label="Fecha límite (opcional)" value="${esc(b.fecha)}">
+      <select id="pend-prio" aria-label="Prioridad"><option value="alta">Prioridad alta</option><option value="media">Prioridad media</option><option value="baja">Prioridad baja</option></select>
+      <button class="btn" id="pend-add-btn" type="submit">${ico('plus')} Agregar</button>
+    </form>
+    <div class="form-error" id="pend-error" role="alert"></div>
+    <div id="pend-zona"></div>
+    <p class="pend-priv">${ico('pendientes')} Privado de verdad: se guarda en una zona protegida de Supabase. No aparece para el equipo, ni en el link del jefe, ni en el respaldo.</p>`;
+  $('#pend-prio').value = b.prio;
+  $('#pend-titulo').addEventListener('input', e=>{ b.titulo = e.target.value; $('#pend-error').textContent = ''; });
+  $('#pend-fecha').addEventListener('input', e=>{ b.fecha = e.target.value; });
+  $('#pend-prio').addEventListener('input', e=>{ b.prio = e.target.value; });
+  $('#pend-form').addEventListener('submit', e=>{ e.preventDefault(); agregarPendiente(); });
+  $('#pend-zona').addEventListener('click', e=>{
+    const a = e.target.closest('[data-acc]'); if(!a) return;
+    const fila = a.closest('[data-id]'), id = fila && fila.dataset.id;
+    if(a.dataset.acc === 'vista'){ STATE._pendVista = a.dataset.v; pintarPendientes(); }
+    else if(a.dataset.acc === 'toggle') alternarPend(id);
+    else if(a.dataset.acc === 'editar') abrirModalPendiente(id);
+    else if(a.dataset.acc === 'borrar') confirmarBorrarPend(id);
+  });
+  pintarPendientes();
+  if(Date.now() - (STATE._pendCargadoEn||0) > 20000) cargarPendientes();   // al volver a abrir la sección, se refresca (por si lo agregaste desde otro aparato)
+}
+function avisoPend(est){
+  if(est === 'migracion') return `<div class="pend-aviso"><b>Falta activar esta sección en Supabase</b>
+    <ol><li>Entra a Supabase → tu proyecto → <b>SQL Editor</b> → <b>New query</b>.</li><li>Abre el archivo <code>supabase-migracion-v9-pendientes.sql</code>, copia todo, pégalo y toca <b>Run</b>.</li><li>Vuelve aquí y toca el botón.</li></ol>
+    <button type="button" class="btn small" id="pend-reintentar" data-acc="reintentar">Ya lo corrí, reintentar</button></div>`;
+  if(est === 'bloqueado') return `<div class="pend-aviso"><b>Sección bloqueada por seguridad</b><p>Hubo varios intentos con una contraseña incorrecta. Vuelve a intentar en ${STATE._pendMin||15} min.</p><button type="button" class="btn small" id="pend-reintentar">Reintentar</button></div>`;
+  if(est === 'admin') return `<div class="pend-aviso"><b>No pude confirmar tu contraseña</b><p>Sal del panel y vuelve a entrar con tu contraseña de administrador.</p></div>`;
+  if(est === 'red') return `<div class="pend-aviso"><b>No pude conectar con Supabase</b><p>Revisa tu internet.</p><button type="button" class="btn small" id="pend-reintentar">Reintentar</button></div>`;
+  return `<div class="pend-vacio"><p>Cargando tus pendientes…</p></div>`;
+}
+function filaPend(p){
+  const et = etiquetaFechaPend(p);
+  return `<li class="pend-item${p.hecha?' hecha':''}" data-id="${esc(p.id)}">
+    <button type="button" class="pend-check" data-acc="toggle" aria-pressed="${p.hecha}" aria-label="${p.hecha?'Volver a pendiente':'Marcar como hecho'}: ${esc(p.titulo)}"><span class="pend-check-i">${ico('check')}</span></button>
+    <div class="pend-main" data-acc="editar">
+      <div class="pend-titulo">${esc(p.titulo)}</div>
+      ${p.nota ? `<div class="pend-nota">${esc(p.nota)}</div>` : ''}
+      <div class="pend-meta">${et ? `<span class="pill ${et.cls}">${esc(et.txt)}</span>` : ''}${p.hecha ? '' : `<span class="pend-prio ${p.prioridad}"><i></i>${PRIO_ETQ[p.prioridad]}</span>`}</div>
+    </div>
+    <div class="pend-acts"><button type="button" class="pend-ib" data-acc="editar" aria-label="Editar: ${esc(p.titulo)}">${ico('editar')}</button><button type="button" class="pend-ib" data-acc="borrar" aria-label="Eliminar: ${esc(p.titulo)}">${ico('papelera')}</button></div>
+  </li>`;
+}
+function pintarPendientes(){
+  const z = $('#pend-zona'); if(!z) return;
+  const est = STATE._pendEstado || 'cargando', lista = Array.isArray(STATE.pendientes) ? STATE.pendientes : null;
+  const form = $('#pend-form'), sub = $('#pend-sub');
+  const apagado = !(est === 'ok' && lista);
+  if(form) form.querySelectorAll('input,select,button').forEach(x=> x.disabled = apagado);
+  if(apagado){
+    if(sub) sub.textContent = '';
+    z.innerHTML = avisoPend(est);
+    const r = $('#pend-reintentar', z);
+    if(r) r.onclick = ()=>{ STATE._pendEstado = 'cargando'; pintarPendientes(); cargarPendientes(); };
+    return;
+  }
+  const porHacer = lista.filter(p=>!p.hecha).sort(ordenarPend);
+  const hechas = lista.filter(p=>p.hecha).sort((a,b)=> String(b.hecha_en||'') < String(a.hecha_en||'') ? -1 : 1);
+  const vista = STATE._pendVista === 'hechas' ? 'hechas' : 'porhacer', urg = pendUrg();
+  if(sub) sub.textContent = porHacer.length
+    ? `${porHacer.length} por hacer${urg ? ` · ${urg} para hoy o atrasado${urg===1?'':'s'}` : ''}.`
+    : 'No tienes nada pendiente. Agrega lo que tengas en mente.';
+  const items = vista === 'hechas' ? hechas : porHacer;
+  z.innerHTML = `
+    <div class="pend-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="${vista==='porhacer'}" class="${vista==='porhacer'?'on':''}" data-acc="vista" data-v="porhacer">Por hacer <span>${porHacer.length}</span></button>
+      <button type="button" role="tab" aria-selected="${vista==='hechas'}" class="${vista==='hechas'?'on':''}" data-acc="vista" data-v="hechas">Hechas <span>${hechas.length}</span></button>
+    </div>
+    ${items.length ? `<ul class="pend-lista">${items.map(filaPend).join('')}</ul>`
+      : `<div class="pend-vacio">${ico('check')}<p>${vista==='hechas' ? 'Aún no has marcado ninguno como hecho.' : 'Todo hecho. Lo que agregues arriba aparece aquí.'}</p></div>`}`;
+}
+
+/* ---------- acciones ---------- */
+async function agregarPendiente(){
+  const ti = $('#pend-titulo'), err = $('#pend-error'), btn = $('#pend-add-btn'), tit = ti.value.trim();
+  err.textContent = '';
+  if(!tit){ err.textContent = 'Escribe qué tienes pendiente.'; ti.focus(); return; }
+  btn.disabled = true;
+  const r = await guardarPend({}, {titulo:tit, nota:'', fecha:$('#pend-fecha').value, prioridad:$('#pend-prio').value, hecha:false});
+  btn.disabled = false;
+  if(!r.ok){ err.textContent = textoErrorPend(r); return; }
+  (STATE.pendientes = STATE.pendientes || []).push(normPend(r.item));
+  STATE._pendBorrador = {titulo:'', fecha:'', prio:'media'};
+  ti.value = ''; $('#pend-fecha').value = ''; $('#pend-prio').value = 'media';
+  STATE._pendVista = 'porhacer';
+  pendActualizarBadges(); pintarPendientes(); ti.focus();
+}
+async function alternarPend(id){
+  const p = (STATE.pendientes || []).find(x=>x.id===id); if(!p) return;
+  const antes = Object.assign({}, p);
+  p.hecha = !p.hecha; p.hecha_en = p.hecha ? new Date().toISOString() : null;
+  pendActualizarBadges(); pintarPendientes();
+  const r = await guardarPend(antes, {hecha:p.hecha});
+  if(r.ok) Object.assign(p, normPend(r.item));
+  else { Object.assign(p, antes); toast(esc(textoErrorPend(r))); if(r.error==='no_existe') cargarPendientes(); }
+  pendActualizarBadges(); pintarPendientes();
+}
+function abrirModalPendiente(id){
+  const p = (STATE.pendientes || []).find(x=>x.id===id); if(!p) return;
+  document.querySelectorAll('.modal-overlay.pd').forEach(x=>x.remove());
+  const ov = el(`<div class="modal-overlay pd"><div class="modal" role="dialog" aria-modal="true" aria-label="Editar pendiente">
+    <h3>Editar pendiente</h3>
+    <div class="field"><label for="pd-titulo">Pendiente</label><input id="pd-titulo" type="text" maxlength="200" autocomplete="off" value="${esc(p.titulo)}"></div>
+    <div class="field"><label for="pd-nota">Nota (opcional)</label><textarea id="pd-nota" maxlength="1000" placeholder="Detalles, a quién llamar, links…">${esc(p.nota)}</textarea></div>
+    <div class="pd-fila">
+      <div class="field"><label for="pd-fecha">Fecha límite</label><input id="pd-fecha" type="date" value="${esc(p.fecha||'')}"></div>
+      <div class="field"><label for="pd-prio">Prioridad</label><select id="pd-prio"><option value="alta">Alta</option><option value="media">Media</option><option value="baja">Baja</option></select></div>
+    </div>
+    <label class="chk"><input type="checkbox" id="pd-hecha"${p.hecha?' checked':''}> Ya está hecho</label>
+    <div class="form-error" id="pd-error" role="alert"></div>
+    <div class="modal-actions"><button type="button" class="btn danger small" id="pd-del" style="margin-right:auto">${ico('papelera')} Eliminar</button><button type="button" class="btn secondary" id="pd-cancel">Cancelar</button><button type="button" class="btn" id="pd-ok">Guardar</button></div>
+  </div></div>`);
+  document.body.appendChild(ov);
+  $('#pd-prio', ov).value = p.prioridad;
+  const err = $('#pd-error', ov), ok = $('#pd-ok', ov);
+  $('#pd-cancel', ov).onclick = ()=> ov.remove();
+  ov.addEventListener('mousedown', e=>{ if(e.target===ov) ov.remove(); });
+  $('#pd-del', ov).onclick = ()=>{ ov.remove(); confirmarBorrarPend(id); };
+  ov.addEventListener('input', ()=>{ err.textContent = ''; });
+  const guardar = async ()=>{
+    const tit = $('#pd-titulo', ov).value.trim();
+    if(!tit){ err.textContent = 'Escribe qué tienes pendiente.'; $('#pd-titulo', ov).focus(); return; }
+    ok.disabled = true; const txt = ok.textContent; ok.textContent = 'Guardando…';
+    const r = await guardarPend(p, {titulo:tit, nota:$('#pd-nota', ov).value.trim(), fecha:$('#pd-fecha', ov).value, prioridad:$('#pd-prio', ov).value, hecha:$('#pd-hecha', ov).checked});
+    if(r.ok){ Object.assign(p, normPend(r.item)); ov.remove(); pendActualizarBadges(); pintarPendientes(); return; }
+    err.textContent = textoErrorPend(r); ok.disabled = false; ok.textContent = txt;
+    if(r.error === 'no_existe'){ ov.remove(); cargarPendientes(); }
+  };
+  ok.onclick = guardar;
+  ov.addEventListener('keydown', e=>{ if(e.key==='Enter' && e.target.tagName!=='TEXTAREA' && e.target.tagName!=='BUTTON'){ e.preventDefault(); guardar(); } });
+  setTimeout(()=>{ const f = $('#pd-titulo', ov); if(f){ f.focus(); f.select(); } }, 60);
+}
+function confirmarBorrarPend(id){
+  const p = (STATE.pendientes || []).find(x=>x.id===id); if(!p) return;
+  document.querySelectorAll('.modal-overlay.pd').forEach(x=>x.remove());
+  const ov = el(`<div class="modal-overlay pd"><div class="modal" role="alertdialog" aria-modal="true" aria-label="Eliminar pendiente">
+    <h3>¿Eliminar este pendiente?</h3><p class="mv-tarea">${esc(p.titulo)}</p>
+    <p class="hint">No se puede deshacer.</p><div class="form-error" id="pd-error" role="alert"></div>
+    <div class="modal-actions"><button type="button" class="btn secondary" id="pd-cancel">Cancelar</button><button type="button" class="btn danger" id="pd-ok">Eliminar</button></div></div></div>`);
+  document.body.appendChild(ov);
+  const ok = $('#pd-ok', ov);
+  $('#pd-cancel', ov).onclick = ()=> ov.remove();
+  ov.addEventListener('mousedown', e=>{ if(e.target===ov) ov.remove(); });
+  ok.onclick = async ()=>{
+    ok.disabled = true; ok.textContent = 'Eliminando…';
+    const r = await pendRPC('jefe_pendientes_borrar', {p_id: id});
+    if(r.ok || r.error === 'no_existe'){ STATE.pendientes = (STATE.pendientes || []).filter(x=>x.id!==id); ov.remove(); pendActualizarBadges(); pintarPendientes(); return; }
+    $('#pd-error', ov).textContent = textoErrorPend(r); ok.disabled = false; ok.textContent = 'Eliminar';
+  };
+  setTimeout(()=> $('#pd-cancel', ov).focus(), 60);
+}
 
 boot();
 </script>
