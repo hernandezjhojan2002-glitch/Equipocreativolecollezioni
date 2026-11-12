@@ -27,7 +27,8 @@ const S = {
   tab: 'escanear', resultado: null, recientes: [], cola: [], enLinea: navigator.onLine,
   filtros: { sede: '', estado: 'falta', marca: '', lista: '' }, buscar: '', tecladoTexto: false,
   reporteLista: '', ultimo: { c: '', t: 0 }, sincronizando: false, _timer: null,
-  archivo: [], ixArchivo: new Map(), progreso: {}, repDatos: {}, calMes: '', calAnio: 0, sesionOn: false, sesion: []
+  archivo: [], ixArchivo: new Map(), progreso: {}, repDatos: {}, calMes: '', calAnio: 0, sesionOn: false, sesion: [],
+  permisos: { admin: false, marcar: [] }, demoRol: ''
 };
 
 /* ---------- utilidades ---------- */
@@ -73,7 +74,9 @@ const ICON = {
   copiar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
   nube: '<path d="M3 3l18 18M7 18h10a4 4 0 0 0 1.6-7.7A6 6 0 0 0 8.3 7.4M5.2 8.8A4.5 4.5 0 0 0 7 18"/>',
   descargar: '<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>',
-  cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  imagen: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/>'
 };
 const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`;
 const logo = h => `<img class="brand-logo-dark" src="${LOGO_LIGHT}" alt="LE COLLEZIONI" style="height:${h}px;width:auto;"><img class="brand-logo-light" src="${LOGO_DARK}" alt="LE COLLEZIONI" style="height:${h}px;width:auto;">`;
@@ -148,6 +151,14 @@ window.addEventListener('offline', () => { S.enLinea = false; pintarIndicador();
 
 /* ---------- datos ---------- */
 function reconstruirIndice() { S.ix = N.crearIndice([...S.prod.values()]); }
+/* ---------- quién puede hacer qué (el servidor lo vuelve a validar siempre) ----------
+   Jefe (admin): todo. Encargado: marca pasos solo en la colección cuya tarea de Fotografía
+   tiene asignada en Equipo Creativo. Todos los demás: SOLO CONSULTA. */
+const esJefe = () => S.modo === 'admin' || !!(S.permisos && S.permisos.admin);
+const listasQueMarca = () => (S.permisos && S.permisos.marcar) || [];
+const puedeMarcarLista = id => esJefe() || listasQueMarca().includes(id);
+const puedeMarcar = p => !!p && puedeMarcarLista(p.lista_id);
+const puedeMarcarAlgo = () => esJefe() || listasQueMarca().length > 0;
 // Memoria entre colecciones: referencias de colecciones archivadas (otros meses)
 function construirArchivo() {
   const m = new Map();
@@ -160,10 +171,10 @@ function construirArchivo() {
   });
   S.ixArchivo = m;
 }
-function buscarArchivo(c) {
+function buscarArchivo(c, manual) {
   const m = S.ixArchivo; if (!m || !m.size) return null;
   let mejor = null;
-  [c, c.length > 6 ? c.slice(0, -2) : '', N.alnum(c)].filter(Boolean).forEach(k => (m.get(k) || []).forEach(e => { if (!mejor || N.ORDEN[e.estado] > N.ORDEN[mejor.estado]) mejor = e; }));
+  [c, c.length > 6 ? c.slice(0, -2) : '', manual ? N.alnum(c) : ''].filter(Boolean).forEach(k => (m.get(k) || []).forEach(e => { if (!mejor || N.ORDEN[e.estado] > N.ORDEN[mejor.estado]) mejor = e; }));
   return mejor;
 }
 function aplicarCola(p) {                // lo pendiente de enviar manda sobre lo que dice el servidor
@@ -182,7 +193,8 @@ function fusionarProducto(p) {
   if (S.resultado && S.resultado.p && S.resultado.p.id === p.id) { S.resultado.p = S.prod.get(p.id) || S.resultado.p; }
 }
 function aplicarDatos(r) {
-  S.actor = r.actor || S.actor; if (r.puente) S.puente = r.puente;
+  S.actor = r.actor || S.actor; S.puente = r.puente || null;
+  if (r.permisos) S.permisos = r.permisos;
   S.listas = r.listas || [];
   if (r.archivo) { S.archivo = r.archivo; construirArchivo(); }
   const activas = new Set(S.listas.filter(l => l.activa).map(l => l.id));
@@ -194,12 +206,12 @@ function aplicarDatos(r) {
   if (S.resultado && S.resultado.p) S.resultado.p = S.prod.get(S.resultado.p.id) || S.resultado.p;
 }
 function guardarCache() {
-  guardar('foto_cache_v1', { quien: claveSesion(), listas: S.listas, productos: [...S.prod.values()], archivo: S.archivo, desde: S.desde, actor: S.actor, puente: S.puente });
+  guardar('foto_cache_v1', { quien: claveSesion(), listas: S.listas, productos: [...S.prod.values()], archivo: S.archivo, desde: S.desde, actor: S.actor, puente: S.puente, permisos: S.permisos });
 }
 function cargarCache() {
   const c = leer('foto_cache_v1', true);
   if (!c || c.quien !== claveSesion()) return false;
-  S.listas = c.listas || []; S.prod = new Map((c.productos || []).map(p => [p.id, p])); S.desde = c.desde; S.actor = c.actor; S.puente = c.puente; S.archivo = c.archivo || []; construirArchivo();
+  S.listas = c.listas || []; S.prod = new Map((c.productos || []).map(p => [p.id, p])); S.desde = c.desde; S.actor = c.actor; S.puente = c.puente; S.permisos = c.permisos || S.permisos; S.archivo = c.archivo || []; construirArchivo();
   reconstruirIndice(); return true;
 }
 async function cargarDatos(completo) {
@@ -258,9 +270,9 @@ async function sincronizarLista(lista, bytes, silencioso) {
   return { s, r };
 }
 async function autoSincronizar() {
-  if (S.modo === 'externo' || S.sincronizando) return;
+  if (!puedeMarcarAlgo() || S.sincronizando) return;
   if (!S.demo && !(S.puente && S.puente.url)) return;
-  const viejas = S.listas.filter(l => l.activa && l.origen === 'drive' && l.archivo_id &&
+  const viejas = S.listas.filter(l => l.activa && l.origen === 'drive' && l.archivo_id && puedeMarcarLista(l.id) &&
     (!l.sincronizada_en || Date.now() - new Date(l.sincronizada_en).getTime() > SYNC_DRIVE_MIN * 60000));
   if (viejas.length) {
     S.sincronizando = true; pintarIndicador();
@@ -271,7 +283,7 @@ async function autoSincronizar() {
 }
 async function actualizarTodoDesdeDrive() {
   if (S.sincronizando) return;
-  const ls = S.listas.filter(l => l.activa && l.origen === 'drive' && l.archivo_id);
+  const ls = S.listas.filter(l => l.activa && l.origen === 'drive' && l.archivo_id && puedeMarcarLista(l.id));
   if (!ls.length) { await cargarDatos(true); toast('Datos al día'); return; }
   S.sincronizando = true; pintarIndicador(); toast('Leyendo el Excel del Drive…', 6000);
   try { for (const l of ls) { try { await sincronizarLista(l, await traerDeDrive(l)); } catch (e) { toast(e.message, 5000); } } }
@@ -302,7 +314,7 @@ const Cam = {
     if (caps.focusMode && caps.focusMode.includes('continuous')) this.track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
     this.linterna = !!caps.torch; this.linternaOn = false;
     if (!this.detector && !this.lector) await this.prepararLector();
-    this.activo = true; this.ciclo();
+    this.activo = true; this.ultimaLectura = Date.now(); this._l = null; this.ciclo();
     return true;
   },
   async prepararLector() {
@@ -326,9 +338,30 @@ const Cam = {
     if (!this.activo) return;
     const v = this.video;
     if (v && !document.hidden && v.readyState >= 2 && Date.now() > this.pausadoHasta) {
-      try { const c = await this.leer(); if (c && this.activo) alDetectar(c, 'camara'); } catch (e) {}
+      try { const c = await this.leer(); if (this.activo) this.evaluar(c); } catch (e) {}
     }
     this.timer = setTimeout(() => this.ciclo(), this.detector ? 90 : 130);
+  },
+  /* EXACTITUD: un código solo se acepta cuando se lee IGUAL varias veces seguidas
+     (3 en Code 39/Codabar/ITF, que no traen dígito de control; 2 en los demás).
+     Si se lee distinto entre una vez y otra, NO se acepta nada y se pide estabilidad. */
+  evaluar(c) {
+    const ahora = Date.now();
+    if (!c) {
+      if (this._l && ahora - this._l.ms > 900) this._l = null;
+      if (ahora - (this.ultimaLectura || ahora) > 7000) avisoLectura('lejos');
+      return;
+    }
+    const t = N.limpiar(c.t);
+    if (t.length < 6) return;                                       // lecturas cortas o parciales: se descartan
+    this.ultimaLectura = ahora;
+    const necesarias = /code_39|codabar|itf/.test(c.f) ? 3 : 2;
+    if (this._l && ahora - this._l.ms < 1500) {
+      if (this._l.t !== t) { this._l = null; avisoLectura('inestable'); return; }   // dos lecturas distintas: se descarta todo
+      this._l.n++; this._l.ms = ahora;
+    } else this._l = { t, n: 1, ms: ahora };
+    if (this._l.n >= necesarias) { this._l = null; avisoLectura(''); alDetectar(t, 'camara'); }
+    else avisoLectura('leyendo');
   },
   async leer() {
     const v = this.video, vw = v.videoWidth, vh = v.videoHeight;
@@ -336,7 +369,7 @@ const Cam = {
     if (this.detector) {
       const r = await this.detector.detect(v);
       const x = r && r.find(b => b.rawValue);
-      return x ? x.rawValue : null;
+      return x ? { t: x.rawValue, f: String(x.format || '').toLowerCase() } : null;
     }
     if (!this.lector) return null;
     const rw = Math.round(vw * 0.88), rh = Math.round(vh * 0.62), rx = Math.round((vw - rw) / 2), ry = Math.round((vh - rh) / 2);
@@ -347,7 +380,8 @@ const Cam = {
     const Z = window.ZXing;
     try {
       const fuente = new Z.HTMLCanvasElementLuminanceSource(cv);
-      return this.lector.decodeWithState(new Z.BinaryBitmap(new Z.HybridBinarizer(fuente))).getText();
+      const res = this.lector.decodeWithState(new Z.BinaryBitmap(new Z.HybridBinarizer(fuente)));
+      return { t: res.getText(), f: String(Z.BarcodeFormat[res.getBarcodeFormat()] || '').toLowerCase() };
     } catch (e) { return null; } finally { try { this.lector.reset(); } catch (e) {} }
   },
   pausar(ms) { this.pausadoHasta = Date.now() + ms; },
@@ -380,6 +414,87 @@ document.addEventListener('visibilitychange', () => {
 })();
 
 /* ============================================================
+   LEER DESDE FOTOS (galería, WhatsApp, capturas o "Tomar foto")
+   Una foto quieta y nítida a veces se lee mejor que la cámara en vivo.
+   ============================================================ */
+// Lee una foto varias veces (tamaños y recortes distintos). Solo devuelve códigos confirmados:
+// los que traen dígito de control con 1 lectura; Code 39/Codabar/ITF con 2 lecturas iguales.
+// Si la foto da lecturas distintas, no devuelve nada y avisa que la foto no es confiable.
+async function codigosDeImagen(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image(); img.src = url; await img.decode();
+    if (!Cam.detector && !Cam.lector) await Cam.prepararLector();
+    const votos = new Map();
+    const anotar = (t, f) => { t = N.limpiar(t); if (t.length < 6) return; const v = votos.get(t) || { n: 0, f: String(f || '').toLowerCase() }; v.n++; votos.set(t, v); };
+    if (Cam.detector) { try { ((await Cam.detector.detect(img)) || []).forEach(b => b.rawValue && anotar(b.rawValue, b.format)); } catch (e) {} }
+    if (window.ZXing) {
+      const Z = window.ZXing, W = img.naturalWidth, H = img.naturalHeight;
+      const hints = new Map(); hints.set(Z.DecodeHintType.TRY_HARDER, true);
+      const lector = new Z.MultiFormatReader(); lector.setHints(hints);
+      const cv = document.createElement('canvas'), ctx = cv.getContext('2d', { willReadFrequently: true });
+      // [lado máximo, x, y, ancho, alto] — foto completa en varios tamaños y el centro
+      const intentos = [[1600, 0, 0, 1, 1], [1000, 0, 0, 1, 1], [1600, .15, .2, .7, .6], [2400, 0, 0, 1, 1], [1300, .05, .1, .9, .8]];
+      for (const [max, rx, ry, rw, rh] of intentos) {
+        const sw = W * rw, sh = H * rh, k = Math.min(1, max / Math.max(sw, sh));
+        cv.width = Math.max(1, Math.round(sw * k)); cv.height = Math.max(1, Math.round(sh * k));
+        ctx.drawImage(img, W * rx, H * ry, sw, sh, 0, 0, cv.width, cv.height);
+        try { const r = lector.decodeWithState(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)))); anotar(r.getText(), Z.BarcodeFormat[r.getBarcodeFormat()]); }
+        catch (e) {} finally { try { lector.reset(); } catch (x) {} }
+      }
+    }
+    const sinControl = f => /code_39|codabar|itf/.test(f);
+    const lista = [...votos.entries()];
+    const conflicto = lista.filter(([, v]) => sinControl(v.f)).length > 1;    // misma foto, lecturas distintas
+    const codigos = lista.filter(([, v]) => sinControl(v.f) ? (!conflicto && v.n >= 2) : true).map(([t]) => t);
+    return { codigos, dudoso: !codigos.length && lista.length > 0 };
+  } finally { URL.revokeObjectURL(url); }
+}
+const AYUDA = {
+  '': 'Apunta al código de barras de la etiqueta o de la caja',
+  leyendo: 'Leyendo… mantén el celular quieto',
+  inestable: 'Pon el celular más estable: el código no se leyó igual',
+  lejos: 'Acerca el código hasta que llene el recuadro y mantén el celular quieto'
+};
+let _avisoHasta = 0;
+function avisoLectura(tipo) {
+  const a = $('.cam .ayuda'); if (!a) return;
+  if (tipo !== 'inestable' && tipo !== '' && Date.now() < _avisoHasta) return;     // el aviso de estabilidad se queda un momento
+  if (tipo === 'inestable') { _avisoHasta = Date.now() + 2500; try { navigator.vibrate && navigator.vibrate(40); } catch (e) {} }
+  if (tipo === '') _avisoHasta = 0;
+  a.textContent = AYUDA[tipo] || AYUDA[''];
+  a.classList.toggle('alerta', tipo === 'inestable');
+}
+function pedirFotos() { const i = $('#foto-in'); if (!i) return; i.value = ''; i.click(); }
+async function leerFotos(files) {
+  files = [...(files || [])].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp|gif)$/i.test(f.name)).slice(0, 30);
+  if (!files.length) return;
+  Cam.pausar(4000);
+  toast(files.length > 1 ? `Leyendo ${files.length} fotos…` : 'Leyendo la foto…', 15000);
+  const res = [];
+  for (const f of files) {
+    let cods = [], dudoso = false;
+    try { const r = await codigosDeImagen(f); cods = r.codigos; dudoso = r.dudoso; } catch (e) {}
+    if (!cods.length) { res.push({ nombre: f.name, codigo: null, dudoso }); continue; }
+    for (const c of cods) { S.ultimo = { c: '', t: 0 }; alDetectar(c, 'foto'); res.push({ nombre: f.name, codigo: N.limpiar(c), id: S.resultado && S.resultado.p && S.resultado.p.id, archivo: !!(S.resultado && S.resultado.archivo) }); }
+  }
+  $$('.toast').forEach(t => t.remove());
+  if (files.length === 1) {
+    if (!res[0].codigo) toast(res[0].dudoso ? 'La foto no es lo bastante nítida para leer el código con seguridad. Tómala otra vez con el celular quieto y el código derecho.' : 'No encontré un código de barras en la foto. Si es un sticker escrito a mano, búscalo en Buscar.', 6500);
+    return;
+  }
+  const ok = res.filter(x => x.id).length, sin = res.filter(x => !x.codigo).length;
+  hoja(`<h3>Resultado de ${files.length} fotos</h3><p class="hint" style="margin-bottom:10px;">${ok} en la lista · ${res.filter(x => x.codigo && !x.id).length} no están${sin ? ` · ${sin} sin código legible` : ''}</p>
+    <div class="items">${res.map(x => {
+      const p = x.id && S.prod.get(x.id);
+      const cls = p ? (N.yaFotografiada(p) ? 'warn' : 'ok') : x.archivo ? 'warn' : x.codigo ? 'no' : '';
+      const t = p ? esc(p.descripcion || p.ref_base) : x.archivo ? 'Está en otra colección' : x.codigo ? 'No está en la lista' : x.dudoso ? 'Foto poco nítida: tómala otra vez' : 'Sin código legible';
+      return `<button class="item" ${p ? `data-acc="ver" data-id="${esc(p.id)}"` : ''}><span class="marcador ${cls}"></span><span class="crece"><span class="t">${t}</span>
+        <span class="s">${x.codigo ? `<span class="mono">${esc(x.codigo)}</span> · ` : ''}${esc(x.nombre || '')}</span></span>${p ? pillEstado(p.estado) : ''}</button>`;
+    }).join('')}</div>`);
+}
+
+/* ============================================================
    ESCANEO → RESULTADO
    ============================================================ */
 function alDetectar(codigo, origen) {
@@ -388,7 +503,7 @@ function alDetectar(codigo, origen) {
   if (S.ultimo.c === c && Date.now() - S.ultimo.t < 2500) return;
   S.ultimo = { c, t: Date.now() };
   Cam.pausar(1100);
-  const b = N.buscar(S.ix, c);
+  const b = N.buscar(S.ix, c, origen === 'manual');
   const r = { codigo: c, tipo: b.tipo, sufijo: b.sufijo, resultados: b.resultados, origen, cuando: ahoraIso() };
   r.p = b.resultados[0] ? b.resultados[0].p : null;
   r.talla = b.resultados[0] ? b.resultados[0].talla : '';
@@ -396,14 +511,16 @@ function alDetectar(codigo, origen) {
     const ya = N.yaFotografiada(r.p);
     r.ya = ya;
     ya ? Sonido.ya() : Sonido.si();
-    encolar('foto_escanear', { p_codigo: c, p_producto: r.p.id });
-    if (r.p.estado === 'pendiente') { r.p.estado = 'localizado'; r.p.estado_por = S.actor && S.actor.nombre; r.p.estado_en = ahoraIso(); reconstruirIndice(); }
+    if (puedeMarcar(r.p)) {                          // solo el jefe o el encargado dejan rastro y marcan "Localizada"
+      encolar('foto_escanear', { p_codigo: c, p_producto: r.p.id });
+      if (r.p.estado === 'pendiente') { r.p.estado = 'localizado'; r.p.estado_por = S.actor && S.actor.nombre; r.p.estado_en = ahoraIso(); reconstruirIndice(); }
+    }
   } else {
-    r.archivo = buscarArchivo(c);
+    r.archivo = buscarArchivo(c, origen === 'manual');
     r.archivo ? Sonido.ya() : Sonido.no();
-    encolar('foto_escanear', { p_codigo: c, p_producto: null });
+    if (puedeMarcarAlgo()) encolar('foto_escanear', { p_codigo: c, p_producto: null });
   }
-  if (r.p && S.sesionOn && !S.sesion.includes(r.p.id)) { S.sesion.push(r.p.id); guardarSesion(); }
+  if (r.p && S.sesionOn && puedeMarcar(r.p) && !S.sesion.includes(r.p.id)) { S.sesion.push(r.p.id); guardarSesion(); }
   S.resultado = r;
   S.recientes.unshift({ codigo: c, tipo: r.tipo, id: r.p && r.p.id, archivo: !!r.archivo, cuando: r.cuando });
   S.recientes = S.recientes.slice(0, 25);
@@ -413,6 +530,7 @@ function alDetectar(codigo, origen) {
 
 function marcar(p, estado) {
   if (!p || p.estado === estado) return;
+  if (!puedeMarcar(p)) return toast('Solo consulta: los pasos los marca el encargado de fotografía.', 4000);
   p.estado = estado; p.estado_por = S.actor && S.actor.nombre; p.estado_en = ahoraIso();
   S.prod.set(p.id, p); reconstruirIndice(); guardarCache();
   encolar('foto_marcar', { p_producto: p.id, p_estado: estado });
@@ -479,11 +597,16 @@ function tarjetaProducto(r) {
         ${p.drive_archivo ? `<dt>Foto en Drive</dt><dd>${esc(p.drive_archivo)}</dd>` : ''}
       </dl>
       ${(p.alertas || []).length ? `<ul class="alertas">${p.alertas.map(a => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}
-      <div class="pasos" role="group" aria-label="Paso de la foto">${N.ESTADOS.map(([k, l]) => {
+      ${puedeMarcar(p) ? `<div class="pasos" role="group" aria-label="Paso de la foto">${N.ESTADOS.map(([k, l]) => {
         const o = N.ORDEN[k], act = N.ORDEN[p.estado];
         return `<button class="paso ${o < act ? 'hecho' : ''} ${o === act ? 'actual' : ''}" data-acc="marcar" data-id="${esc(p.id)}" data-estado="${k}" aria-pressed="${o === act}"><i></i>${esc(l)}</button>`;
       }).join('')}</div>
-      ${sig ? `<div class="res-acc"><button class="btn ok full" data-acc="marcar" data-id="${esc(p.id)}" data-estado="${sig[0]}">${ico('check')} ${esc(sig[1])}</button></div>` : `<div class="nota-talla ok" style="margin:0;">Lista completa: foto subida.</div>`}
+      ${sig ? `<div class="res-acc"><button class="btn ok full" data-acc="marcar" data-id="${esc(p.id)}" data-estado="${sig[0]}">${ico('check')} ${esc(sig[1])}</button></div>` : `<div class="nota-talla ok" style="margin:0;">Lista completa: foto subida.</div>`}`
+      : `<div class="pasos solo" aria-label="Paso de la foto: ${esc(N.etiquetaEstado(p.estado))}">${N.ESTADOS.map(([k, l]) => {
+        const o = N.ORDEN[k], act = N.ORDEN[p.estado];
+        return `<div class="paso ${o < act ? 'hecho' : ''} ${o === act ? 'actual' : ''}"><i></i>${esc(l)}</div>`;
+      }).join('')}</div>
+      <div class="consulta">${ico('lock')} Solo consulta. ${(S.listas.find(l => l.id === p.lista_id) || {}).encargado ? `Los pasos los marca ${esc((S.listas.find(l => l.id === p.lista_id) || {}).encargado)}.` : 'Los pasos los marca el encargado de fotografía.'}</div>`}
       <div class="res-meta">${esc(nombreListaMes(p.lista_id))} · ${p.estado_por ? `último cambio: ${esc(p.estado_por)}, ${esc(haceCuanto(p.estado_en))}` : 'sin cambios todavía'}</div>
       ${otras.length ? `<div class="otras">También aparece en: ${otras.map(o => esc(nombreLista(o.lista_id) + ' · ' + o.ref_base)).join(', ')}</div>` : ''}
     </div></div>`;
@@ -534,9 +657,16 @@ function colaTexto() {
 }
 
 const TABS = [['escanear', 'Escanear', 'scan'], ['buscar', 'Buscar', 'buscar'], ['pendientes', 'Pendientes', 'lista'], ['calendario', 'Calendario', 'cal']];
+function asegurarInputFotos() {
+  if ($('#foto-in')) return;
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.multiple = true; i.id = 'foto-in'; i.className = 'hidden';
+  i.addEventListener('change', () => leerFotos(i.files));
+  document.body.appendChild(i);
+}
 function pintar() {
-  const tabs = S.modo === 'admin' || S.modo === 'demo' ? [...TABS, ['admin', 'Admin', 'admin']] : TABS;
-  $('#app').innerHTML = `${S.demo ? '<div class="demo-banda">Modo prueba: datos de ejemplo, nada se guarda. Prueba con el código 149539691785108.</div>' : ''}
+  asegurarInputFotos();
+  const tabs = esJefe() ? [...TABS, ['admin', 'Admin', 'admin']] : TABS;
+  $('#app').innerHTML = `${S.demo ? `<div class="demo-banda">Modo prueba (${{ jefe: 'jefe', encargado: 'encargado: David', consulta: 'solo consulta' }[S.demoRol]}): datos de ejemplo, nada se guarda. Prueba con 149539691785108.</div>` : ''}
     <header class="top"></header><main id="vista"></main>
     <nav class="nav" aria-label="Secciones"><div class="nav-in">${tabs.map(([k, l, i]) => `<button data-acc="ir" data-tab="${k}" ${S.tab === k ? 'aria-current="page"' : ''}>${ico(i)}<span>${l}</span></button>`).join('')}</div></nav>`;
   pintarTop(); pintarVista();
@@ -568,7 +698,7 @@ function vistaEscanear(v) {
   v.innerHTML = `<div class="cam" id="cam"><video id="video" playsinline muted autoplay></video>
       <div class="mascara"><div class="ventana"></div><div class="linea"></div></div>
       <div class="ayuda">Apunta al código de barras de la etiqueta o de la caja</div>
-      <div class="controles"><button id="b-linterna" class="hidden" data-acc="linterna" aria-pressed="false" aria-label="Linterna">${ico('flash')}</button>
+      <div class="controles"><button data-acc="fotos" aria-label="Leer desde una foto" title="Leer desde una foto">${ico('imagen')}</button><button id="b-linterna" class="hidden" data-acc="linterna" aria-pressed="false" aria-label="Linterna">${ico('flash')}</button>
       <button data-acc="pausar" aria-label="${S.camPausada ? 'Encender cámara' : 'Pausar cámara'}">${S.camPausada ? ico('play') : ico('pausa')}</button></div>
       <div class="aviso hidden" id="cam-aviso"></div></div>
     <div class="estado-lista" id="estado-lista"></div>
@@ -596,7 +726,7 @@ function avisoCamara(tipo) {
     camara: ['No pude abrir la cámara', 'Cierra otras apps que la estén usando y vuelve a intentar.'],
     pausada: ['Cámara en pausa', 'Tócala para seguir escaneando.']
   }[tipo] || ['Cámara no disponible', ''];
-  a.innerHTML = `<b>${esc(txt[0])}</b><p>${esc(txt[1])}</p><div class="fila"><button class="btn" data-acc="${tipo === 'pausada' ? 'pausar' : 'reintentar-cam'}">${tipo === 'pausada' ? 'Seguir escaneando' : 'Intentar de nuevo'}</button><button class="btn sec" style="color:#eee;border-color:#666" data-acc="ir" data-tab="buscar">Buscar a mano</button></div>`;
+  a.innerHTML = `<b>${esc(txt[0])}</b><p>${esc(txt[1])}</p><div class="fila"><button class="btn" data-acc="${tipo === 'pausada' ? 'pausar' : 'reintentar-cam'}">${tipo === 'pausada' ? 'Seguir escaneando' : 'Intentar de nuevo'}</button><button class="btn sec" data-acc="fotos">Leer desde foto</button><button class="btn sec" data-acc="ir" data-tab="buscar">Buscar a mano</button></div>`;
   a.classList.remove('hidden');
 }
 function pintarEstadoLista() {
@@ -604,7 +734,8 @@ function pintarEstadoLista() {
   const activas = S.listas.filter(l => l.activa);
   if (!activas.length) { e.innerHTML = `<span>No hay listas activas. ${S.modo === 'admin' ? 'Agrega una en Admin.' : 'Pídele al admin que conecte una.'}</span>`; return; }
   const c = contar([...S.prod.values()]);
-  e.innerHTML = `<b style="color:var(--ink);font-weight:500;flex-basis:100%;">${esc(activas.length === 1 ? activas[0].nombre : activas.length + ' listas activas')}</b>
+  const rol = esJefe() ? '' : puedeMarcarAlgo() ? `<span class="pill e-fotografiado">Encargado de fotos</span>` : `<span class="pill">${ico('lock')} Solo consulta</span>`;
+  e.innerHTML = `<b style="color:var(--ink);font-weight:500;flex-basis:100%;display:flex;justify-content:space-between;gap:8px;align-items:center;">${esc(activas.length === 1 ? activas[0].nombre : activas.length + ' listas activas')}${rol}</b>
     <span>${c.total} refs · ${c.fot} fotografiadas · ${c.subido} subidas</span><div class="crece" style="flex-basis:100%;">${barraHtml(c)}</div>`;
 }
 function pintarResultado() {
@@ -647,6 +778,7 @@ function cargarSesion() { const s = leer('foto_sesion_v1', true) || {}; S.sesion
 function guardarSesion() { guardar('foto_sesion_v1', { on: S.sesionOn, ids: S.sesion }); pintarSesion(); }
 function pintarSesion() {
   const d = $('#sesion-bar'); if (!d) return;
+  if (!puedeMarcarAlgo()) { d.innerHTML = ''; return; }
   if (!S.sesionOn) { d.innerHTML = `<button class="chip" data-acc="sesion-on" style="margin-top:10px;">${ico('lista')} Sesión de fotos: marcar varias de una vez</button>`; return; }
   const n = S.sesion.filter(id => S.prod.has(id)).length;
   d.innerHTML = `<div class="sesion"><span class="crece"><b>Sesión de fotos</b> · ${n} escaneada${n === 1 ? '' : 's'}</span>
@@ -661,6 +793,8 @@ function abrirSesion() {
     <div class="fila"><button class="btn ok" data-acc="lote" data-estado="fotografiado">Fotografiadas</button><button class="btn sec" data-acc="lote" data-estado="editado">Editadas</button><button class="btn sec" data-acc="lote" data-estado="subido">Subidas</button></div>`);
 }
 function marcarLote(ids, estado) {
+  ids = ids.filter(id => puedeMarcar(S.prod.get(id)));
+  if (!ids.length) return toast('Solo consulta: no puedes marcar estas referencias.');
   ids.forEach(id => { const p = S.prod.get(id); if (p) { p.estado = estado; p.estado_por = S.actor && S.actor.nombre; p.estado_en = ahoraIso(); } });
   reconstruirIndice(); guardarCache();
   encolar('foto_marcar_lote', { p_productos: ids, p_estado: estado });
@@ -675,15 +809,16 @@ function vistaBuscar(v) {
     <p class="hint" style="margin-bottom:10px;">Para stickers escritos a mano o etiquetas dañadas: escribe el código, la referencia o el serial. Con 5 o 6 dígitos ya aparece.</p>
     <form class="buscador" id="f-buscar" autocomplete="off"><input class="inp" id="q" value="${esc(S.buscar)}" inputmode="${S.tecladoTexto ? 'text' : 'numeric'}" autocapitalize="characters" spellcheck="false" placeholder="Código, referencia o serial" aria-label="Código, referencia o serial">
       <div class="lado"><button type="button" data-acc="teclado">${S.tecladoTexto ? '123' : 'ABC'}</button><button type="submit" aria-label="Buscar">${ico('buscar')}</button></div></form>
+    <button class="btn sec full" style="margin-top:10px;" data-acc="fotos">${ico('imagen')} Leer el código desde una foto</button>
     <div id="sug" style="margin-top:12px;"></div>`;
   const q = $('#q');
   q.addEventListener('input', () => { S.buscar = q.value; pintarSugerencias(); });
   $('#f-buscar').addEventListener('submit', e => {
     e.preventDefault(); const t = q.value.trim(); if (!t) return;
-    const b = N.buscar(S.ix, t);
+    const b = N.buscar(S.ix, t, true);
     if (b.tipo !== 'ninguno') { S.ultimo = { c: '', t: 0 }; alDetectar(t, 'manual'); abrirProducto(b.resultados[0].p, { codigo: N.limpiar(t), tipo: b.tipo, talla: b.resultados[0].talla, sufijo: b.sufijo, resultados: b.resultados }); }
     else {
-      const ar = buscarArchivo(N.limpiar(t));
+      const ar = buscarArchivo(N.limpiar(t), true);
       if (ar) { S.ultimo = { c: '', t: 0 }; alDetectar(t, 'manual'); hoja(tarjetaArchivo({ codigo: N.limpiar(t), archivo: ar })); }
       else pintarSugerencias(true);
     }
@@ -808,15 +943,15 @@ function pintarMes() {
     const c = cuentasLista(l), x = S.progreso[l.id] || {};
     return `<div class="panel col ${l.id === S.reporteLista ? 'sel' : ''}">
       <div class="fila entre"><b style="font-weight:500;">${esc(l.nombre)}</b>${l.activa ? '<span class="pill e-fotografiado">Activa</span>' : '<span class="pill">Archivada</span>'}</div>
-      <p class="hint" style="margin:4px 0 8px;">${c.total} refs · ${c.fot} fotografiadas · ${c.subido} subidas${x.arrastrados ? ` · ${x.arrastrados} vienen de otro mes` : ''}${x.otra ? ` · ${x.otra} también en otra colección` : ''}</p>
+      <p class="hint" style="margin:4px 0 8px;">Encargado: <b>${esc(l.encargado || 'sin asignar')}</b> · ${c.total} refs · ${c.fot} fotografiadas · ${c.subido} subidas${x.arrastrados ? ` · ${x.arrastrados} vienen de otro mes` : ''}${x.otra ? ` · ${x.otra} también en otra colección` : ''}</p>
       ${barraHtml(c)}
       <div class="fila" style="margin-top:10px;"><button class="btn sec peq" data-acc="ver-col" data-id="${esc(l.id)}">Ver reporte</button>
         <button class="btn sec peq" data-acc="cambios" data-id="${esc(l.id)}">Qué cambió en el Excel</button></div></div>`;
-  }).join('')}</div>` : `<div class="vacio">No hay Excel en ${esc(titulo)}.${S.modo === 'admin' || S.modo === 'demo' ? ' Agrégalo aquí abajo.' : ''}</div>`);
+  }).join('')}</div>` : `<div class="vacio">No hay Excel en ${esc(titulo)}.${esJefe() ? ' Agrégalo aquí abajo.' : ''}</div>`);
 }
 function pintarFormMes() {
   const d = $('#mes-form'); if (!d) return;
-  if (S.modo !== 'admin' && S.modo !== 'demo') { d.innerHTML = ''; return; }
+  if (!esJefe()) { d.innerHTML = ''; return; }
   const titulo = N.nombreMes(S.calMes + '-01');
   d.innerHTML = `<div class="panel" style="margin-top:12px;"><b style="font-weight:500;">Agregar Excel a ${esc(titulo)}</b>
     <p class="hint" style="margin:4px 0 12px;">Crea la colección del mes y su tarea “Fotografía · ${esc(titulo)}” en Equipo Creativo, con entrega el último día del mes.</p>
@@ -845,7 +980,7 @@ async function pintarReporte(traer) {
   d.innerHTML = `<div class="sec-t">Reporte · ${esc(l.nombre)} · ${esc(N.nombreMes(l.mes))}</div>
     <div class="panel">
       <div class="fila entre"><span class="hint">Excel leído ${esc(haceCuanto(l.sincronizada_en))}</span>
-        <span class="fila">${S.modo !== 'externo' && l.archivo_id && l.activa ? `<button class="btn sec peq" data-acc="sync-drive">${ico('sync')} Leer del Drive</button>` : ''}
+        <span class="fila">${puedeMarcarLista(l.id) && l.archivo_id && l.activa ? `<button class="btn sec peq" data-acc="sync-drive">${ico('sync')} Leer del Drive</button>` : ''}
         ${local ? `<button class="btn peq" data-acc="exportar">${ico('descargar')} Excel</button>` : ''}</span></div>
       <div class="kpis">
         <div class="kpi"><b>${c.loc}</b><span>Localizadas · ${pct(c.loc)}</span></div>
@@ -1005,14 +1140,17 @@ async function vistaAdmin(v) {
   ]);
   const g = $('#ad-gente'); if (!g) return;
   const talentos = (tal && tal.data) || [], externos = ((ext && ext.data) || []);
-  g.innerHTML = `<div class="panel"><b style="font-weight:500;">Equipo creativo</b><p class="hint" style="margin:4px 0 10px;">Entran con la misma clave de 4 dígitos de Equipo Creativo.</p>
+  g.innerHTML = `<div class="panel"><b style="font-weight:500;">Link del equipo · no cambia nunca</b>
+      <p class="hint" style="margin:4px 0 10px;">Un solo link para todos: cada persona elige su nombre y pone su clave. Cuando termine un practicante y llegue otro, este link sigue igual (desactiva al que se va y agrega al nuevo en Equipo Creativo).</p>
+      <div class="caja-link"><span class="crece mono">${esc(base)}</span><button class="btn sec peq" data-acc="copiar" data-txt="${esc(base)}">${ico('copiar')} Copiar</button></div></div>
+    <div class="panel"><b style="font-weight:500;">Equipo creativo</b><p class="hint" style="margin:4px 0 10px;">Entran con su clave de Equipo Creativo. <b>Solo marca pasos quien tenga asignada la tarea de Fotografía</b> de la colección (ej. David); los demás solo consultan. Para cambiar de encargado, reasigna la tarea en el tablero de Equipo Creativo.</p>
       ${talentos.length ? talentos.map(t => `<div class="fila entre" style="padding:8px 0;border-top:1px solid var(--line);"><span>${esc(t.nombre)}</span><button class="btn sec peq" data-acc="copiar" data-txt="${esc(base + '?aprendiz=' + t.id)}">${ico('copiar')} Copiar link</button></div>`).join('') : '<p class="hint">No pude leer el equipo.</p>'}</div>
-    <div class="panel"><b style="font-weight:500;">Gente externa</b><p class="hint" style="margin:4px 0 10px;">Fotógrafo o personal de tienda: solo usan el scanner, no ven Equipo Creativo.</p>
+    <div class="panel"><b style="font-weight:500;">Asesores y tiendas · solo consulta</b><p class="hint" style="margin:4px 0 10px;">Escanean para ver si la prenda está en la lista y en qué paso va. No pueden marcar ni cambiar nada, y no ven Equipo Creativo.</p>
       ${externos.map(x => `<div class="fila entre" style="padding:8px 0;border-top:1px solid var(--line);"><span class="crece">${esc(x.nombre)} ${x.activo ? '' : '<span class="pill">desactivado</span>'}</span>
         <span class="fila"><button class="btn sec peq" data-acc="copiar" data-txt="${esc(base + '?externo=' + x.id)}">${ico('copiar')} Link</button>
         <button class="btn sec peq" data-acc="ext-pin" data-id="${esc(x.id)}" data-nombre="${esc(x.nombre)}">Nueva clave</button>
         ${x.activo ? `<button class="btn peligro peq" data-acc="ext-off" data-id="${esc(x.id)}">Quitar</button>` : ''}</span></div>`).join('')}
-      <div class="fila" style="margin-top:10px;"><input class="inp crece" id="ext-nombre" placeholder="Nombre (ej. Fotógrafo estudio)"><button class="btn" data-acc="ext-crear">Agregar</button></div></div>`;
+      <div class="fila" style="margin-top:10px;"><input class="inp crece" id="ext-nombre" placeholder="Nombre (ej. Asesor Medellín)"><button class="btn" data-acc="ext-crear">Agregar</button></div></div>`;
   const conf = {}; ((cfg && cfg.data) || []).forEach(r => { conf[r.clave] = r.valor; });
   let carpetas = []; try { carpetas = JSON.parse(conf.carpetas_fotos || '[]'); } catch (e) {}
   S._carpetasAdmin = Array.isArray(carpetas) ? carpetas : [];
@@ -1036,7 +1174,7 @@ function pintarAdminListas() {
   d.innerHTML = [...porMes.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([k, ls]) => `<div class="grupo-t"><span>${esc(N.nombreMes(k + '-01'))}</span><span>${ls.length}</span></div>` + ls.map(l => {
     const c = cuentasLista(l);
     return `<div class="panel"><div class="fila entre"><b style="font-weight:500;">${esc(l.nombre)}</b>${l.activa ? '<span class="pill e-fotografiado">Activa</span>' : '<span class="pill">Archivada</span>'}</div>
-      <p class="hint" style="margin:4px 0 8px;">${l.total_refs} refs · ${c.fot} fotografiadas · ${c.subido} subidas · Excel leído ${esc(haceCuanto(l.sincronizada_en))}${l.sincronizada_por ? ' por ' + esc(l.sincronizada_por) : ''}
+      <p class="hint" style="margin:4px 0 8px;">Encargado: <b>${esc(l.encargado || 'sin asignar — asígnale la tarea en Equipo Creativo')}</b> · ${l.total_refs} refs · ${c.fot} fotografiadas · ${c.subido} subidas · Excel leído ${esc(haceCuanto(l.sincronizada_en))}${l.sincronizada_por ? ' por ' + esc(l.sincronizada_por) : ''}
       · ${l.tarea_id ? 'tarea en Equipo Creativo ✓' : '<span style="color:var(--warn)">sin tarea en Equipo Creativo</span>'}${l.archivo_id && l.archivo_id !== 'demo' ? ` · <a href="https://drive.google.com/file/d/${esc(l.archivo_id)}/view" target="_blank" rel="noopener">abrir en Drive</a>` : ''}</p>
       <div class="fila">${l.archivo_id ? `<button class="btn sec peq" data-acc="lista-sync" data-id="${esc(l.id)}">${ico('sync')} Leer del Drive</button>` : ''}
         <button class="btn sec peq" data-acc="lista-subir" data-id="${esc(l.id)}">${ico('subir')} Subir Excel</button>
@@ -1154,7 +1292,7 @@ async function traerArchivosCarpeta(id) {
 }
 async function revisarCarpetas(manual) {
   const carpetas = (S.puente && S.puente.carpetas) || [];
-  if (S.modo === 'externo') return;
+  if (!puedeMarcarAlgo()) return;
   if (!carpetas.length) { if (manual) toast('No hay carpetas de fotos configuradas (Admin → Conexión).'); return; }
   if (!S.demo && !(S.puente && S.puente.url)) return;
   const ult = Number(leer('foto_drive_ult') || 0);
@@ -1166,7 +1304,7 @@ async function revisarCarpetas(manual) {
     try {
       const archivos = await traerArchivosCarpeta(c.id);
       const marcas = N.emparejarArchivos([...S.prod.values()], archivos)
-        .filter(x => (N.ORDEN[c.estado] || 0) > N.ORDEN[x.p.estado])
+        .filter(x => puedeMarcar(x.p) && (N.ORDEN[c.estado] || 0) > N.ORDEN[x.p.estado])
         .map(x => ({ id: x.p.id, estado: c.estado, archivo: x.archivo }));
       if (!marcas.length) continue;
       const r = S.demo ? Demo.driveMarcar(marcas) : await rpc('foto_drive_marcar', { p_token: tok(), p_marcas: marcas });
@@ -1197,13 +1335,14 @@ document.addEventListener('click', async e => {
   if (el.tagName === 'A') e.preventDefault();
   if (acc === 'ir') { $$('.ov').forEach(o => o.remove()); S.tab = el.dataset.tab; pintar(); window.scrollTo(0, 0); }
   else if (acc === 'marcar') { const p = S.prod.get(el.dataset.id); if (p) marcar(p, el.dataset.estado); }
+  else if (acc.startsWith('lista-') && !esJefe()) return;
   else if (acc === 'ver') { const p = S.prod.get(el.dataset.id); if (p) abrirProducto(p); }
   else if (acc === 'cerrar') { const o = el.closest('.ov'); if (o) o.remove(); }
   else if (acc === 'tema') cambiarTema();
   else if (acc === 'sede') elegirSede(false);
   else if (acc === 'sede-ok') fijarSede(el.dataset.sede);
   else if (acc === 'sede-otra') { const v = $('#sede-otra').value.trim(); if (v) fijarSede(v); }
-  else if (acc === 'sync') { await enviarCola(); if (S.modo !== 'externo') actualizarTodoDesdeDrive(); else { await cargarDatos(true); toast('Datos al día'); } }
+  else if (acc === 'sync') { await enviarCola(); if (puedeMarcarAlgo()) actualizarTodoDesdeDrive(); else { await cargarDatos(true); toast('Datos al día'); } }
   else if (acc === 'sync-drive') actualizarTodoDesdeDrive();
   else if (acc === 'exportar') exportar();
   else if (acc === 'salir') salir();
@@ -1219,6 +1358,9 @@ document.addEventListener('click', async e => {
   else if (acc === 'pasar-ok') pasarPendientes(el);
   else if (acc === 'sesion-on') { S.sesionOn = true; guardarSesion(); toast('Sesión iniciada: cada referencia que escanees se suma'); }
   else if (acc === 'sesion-ver') abrirSesion();
+  else if (acc === 'persona') { S.modo = el.dataset.modo; S.persona = el.dataset.id; S.personaNombre = el.dataset.nombre; guardar('foto_quien', { modo: S.modo, id: S.persona, nombre: S.personaNombre }); entrarPersona(); }
+  else if (acc === 'otra-persona') { borrar('foto_quien'); S.modo = null; S.persona = null; S.personaNombre = ''; selectorPersona(true); }
+  else if (acc === 'fotos') pedirFotos();
   else if (acc === 'instalar') { const pr = window.__pwa && window.__pwa.prompt; if (pr) { pr.prompt(); try { await pr.userChoice; } catch (x) {} window.__pwa.prompt = null; } pintarInstalar(); }
   else if (acc === 'instalar-no') { guardar('foto_instalar_no', '1'); pintarInstalar(); }
   else if (acc === 'sesion-off') { const n = S.sesion.length; if (n && !confirm(`¿Terminar la sesión? Las ${n} sin marcar se quitan de la sesión (no pierden su paso).`)) return; S.sesionOn = false; S.sesion = []; guardarSesion(); }
@@ -1242,9 +1384,10 @@ const ERR_PIN = r => ({
 }[r.error] || 'No pude entrar.');
 function gatePin(msg) {
   const quien = S.modo === 'talento' ? 'Escribe tu clave de 4 dígitos de Equipo Creativo.' : 'Escribe la clave de 4 dígitos que te dieron.';
-  $('#app').innerHTML = `<div class="gate"><div class="gate-card"><div class="logo">${logo(40)}</div><h2>Scanner de fotografía</h2><p>${quien}</p>
+  const otra = S.desdeSelector ? `<p class="hint" style="margin-top:14px;text-align:center;"><a href="#" data-acc="otra-persona">${S.personaNombre ? `No soy ${esc(S.personaNombre)}` : 'Elegir otra persona'}</a></p>` : '';
+  $('#app').innerHTML = `<div class="gate"><div class="gate-card"><div class="logo">${logo(40)}</div><h2>${S.personaNombre ? `Hola, ${esc(S.personaNombre)}` : 'Scanner de fotografía'}</h2><p>${quien}</p>
     <form id="f-pin" novalidate><input class="inp pin" id="pin" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" placeholder="••••" aria-label="Clave de 4 dígitos">
-    <button class="btn full" style="margin-top:14px;" type="submit">Entrar</button><div class="error" id="pin-err" role="alert" style="margin-top:10px;text-align:center;">${esc(msg || '')}</div></form></div></div>`;
+    <button class="btn full" style="margin-top:14px;" type="submit">Entrar</button><div class="error" id="pin-err" role="alert" style="margin-top:10px;text-align:center;">${esc(msg || '')}</div></form>${otra}</div></div>`;
   const inp = $('#pin'); inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g, '').slice(0, 4); });
   $('#f-pin').addEventListener('submit', async e => {
     e.preventDefault(); if (!/^\d{4}$/.test(inp.value)) { $('#pin-err').textContent = 'La clave tiene 4 números.'; return; }
@@ -1284,7 +1427,7 @@ async function salir() {
   Cam.detener(); clearInterval(S._timer);
   if (S.modo === 'admin') { try { await supa.auth.signOut(); } catch (e) {} }
   else { rpc('foto_salir', { p_token: S.token }); borrar(claveSesion()); }
-  borrar('foto_cache_v1'); S.actor = null; location.reload();
+  borrar('foto_cache_v1'); borrar('foto_quien'); S.actor = null; location.reload();
 }
 
 async function entrar() {
@@ -1308,15 +1451,11 @@ async function entrar() {
 async function boot() {
   aplicarTema(tema());
   const q = new URLSearchParams(location.search);
-  if (q.get('demo') === '1') { S.demo = true; S.modo = 'demo'; S.persona = 'demo'; Demo.iniciar(); return entrar(); }
+  if (q.get('demo') === '1') { S.demo = true; S.modo = 'demo'; S.demoRol = ['encargado', 'consulta'].includes(q.get('rol')) ? q.get('rol') : 'jefe'; S.persona = 'demo-' + S.demoRol; Demo.iniciar(); return entrar(); }
   if (q.get('admin') === '1') S.modo = 'admin';
   else if (q.get('aprendiz')) { S.modo = 'talento'; S.persona = q.get('aprendiz'); }
   else if (q.get('externo')) { S.modo = 'externo'; S.persona = q.get('externo'); }
-  else {
-    const ruta = leer('foto_ruta');
-    if (ruta && /^\?(admin=1|aprendiz=|externo=)/.test(ruta)) { location.replace(location.pathname + ruta); return; }
-    return renderSinAcceso();
-  }
+  else return selectorPersona();                     // link del equipo: "¿Quién eres?"
   guardar('foto_ruta', location.search);
   if (!supa) return renderSinAcceso();
   if (S.modo === 'admin') {
@@ -1324,6 +1463,9 @@ async function boot() {
     if (data && data.session && (await rpc('es_admin')) === true) return entrar();
     return gateAdmin();
   }
+  return entrarPersona();
+}
+async function entrarPersona() {
   const ses = leer(claveSesion(), true);
   if (ses && ses.token && ses.expira > Date.now()) { S.token = ses.token; return entrar(); }
   if (S.modo === 'talento') {                       // si ya entró a Equipo Creativo en este teléfono, usa esa clave
@@ -1331,6 +1473,34 @@ async function boot() {
     if (/^\d{4}$/.test(pin)) { const r = await entrarConPin(pin); if (r.ok) return entrar(); }
   }
   gatePin();
+}
+
+/* ---------- Link del equipo (no cambia nunca) ----------
+   Un solo link para todos: cada quien elige su nombre y pone su clave.
+   Cuando termina un practicante y llega otro, el link sigue igual:
+   se desactiva al que se va y se agrega al nuevo en Equipo Creativo. */
+async function selectorPersona(forzar) {
+  S.desdeSelector = true;
+  if (!supa) return renderSinAcceso();
+  const q = leer('foto_quien', true);
+  if (q && q.modo && q.id && !forzar) {             // este celular ya sabe quién es
+    S.modo = q.modo; S.persona = q.id; S.personaNombre = q.nombre;
+    const ses = leer(claveSesion(), true);
+    if (ses && ses.token && ses.expira > Date.now()) { S.token = ses.token; return entrar(); }
+  }
+  $('#app').innerHTML = `<div class="gate"><div class="gate-card"><div class="logo">${logo(40)}</div><p>Cargando…</p></div></div>`;
+  const r = await rpc('foto_personas');
+  if (!r || !r.ok) {
+    $('#app').innerHTML = `<div class="gate"><div class="gate-card"><div class="logo">${logo(40)}</div><h2>Scanner de fotografía</h2><p>${r && r.error === 'migracion' ? 'Falta actualizar el scanner en Supabase (avísale al jefe).' : 'No pude conectar. Revisa tu internet y vuelve a abrir.'}</p></div></div>`;
+    return;
+  }
+  const boton = (modo, x) => `<button data-acc="persona" data-modo="${modo}" data-id="${esc(x.id)}" data-nombre="${esc(x.nombre)}">${esc(x.nombre)}</button>`;
+  $('#app').innerHTML = `<div class="gate"><div class="gate-card" style="text-align:left;"><div class="logo">${logo(40)}</div>
+    <h2 style="text-align:center;">Scanner de fotografía</h2><p style="text-align:center;">¿Quién eres?</p>
+    ${q && q.id && (r.equipo || []).concat(r.externos || []).some(x => x.id === q.id) ? `<button class="btn full" style="margin-bottom:6px;" data-acc="persona" data-modo="${esc(q.modo)}" data-id="${esc(q.id)}" data-nombre="${esc(q.nombre)}">Seguir como ${esc(q.nombre)}</button>` : ''}
+    ${(r.equipo || []).length ? `<div class="sec-t">Equipo creativo</div><div class="opciones">${r.equipo.map(x => boton('talento', x)).join('')}</div>` : ''}
+    ${(r.externos || []).length ? `<div class="sec-t">Asesores y tiendas</div><div class="opciones">${r.externos.map(x => boton('externo', x)).join('')}</div>` : ''}
+    <p class="hint" style="text-align:center;margin-top:14px;">Después pones tu clave de 4 dígitos. ¿Eres el jefe? <a href="?admin=1">Entra aquí</a>.</p></div></div>`;
 }
 
 /* ============================================================
@@ -1391,10 +1561,13 @@ const Demo = {
   async rpc(fn, a) {
     await new Promise(r => setTimeout(r, 60));
     const activas = new Set(this.listas.filter(l => l.activa).map(l => l.id));
-    if (fn === 'foto_datos') return { ok: true, actor: { tipo: 'admin', id: 'demo', nombre: 'Tú (demo)' }, ahora: ahoraIso(), completo: true, listas: this.copia(this.listas),
+    const rol = S.demoRol || 'jefe', marcables = rol === 'jefe' ? this.listas.map(l => l.id) : rol === 'encargado' ? ['demo-nov'] : [];
+    if ((fn === 'foto_marcar' || fn === 'foto_escanear') && a.p_producto) { const p0 = this.prod.find(x => x.id === a.p_producto); if (p0 && !marcables.includes(p0.lista_id)) return fn === 'foto_marcar' ? { ok: false, error: 'permiso' } : { ok: true, consulta: true, producto: this.conOtra(p0) }; }
+    if (fn === 'foto_datos') return { ok: true, actor: { tipo: rol === 'jefe' ? 'admin' : rol === 'encargado' ? 'talento' : 'externo', id: 'demo', nombre: rol === 'encargado' ? 'David (demo)' : rol === 'consulta' ? 'Asesor (demo)' : 'Tú (demo)' },
+      permisos: { admin: rol === 'jefe', marcar: marcables }, ahora: ahoraIso(), completo: true, listas: this.copia(this.listas).map(l => Object.assign(l, { encargado: 'David' })),
       productos: this.prod.filter(p => activas.has(p.lista_id) && !p.movido_a).map(p => this.conOtra(p)),
       archivo: this.prod.filter(p => !activas.has(p.lista_id) && !p.movido_a).map(p => [p.ref_base, p.serial, p.estado, p.lista_id, p.codigos]),
-      puente: { url: 'demo', clave: 'demo', carpetas: this.carpetas } };
+      puente: marcables.length ? { url: 'demo', clave: 'demo', carpetas: this.carpetas } : null };
     if (fn === 'foto_escanear') {
       const p = this.prod.find(x => x.id === a.p_producto);
       this.ev({ accion: p ? 'escaneo' : 'no_encontrado', codigo: a.p_codigo, lista_id: p && p.lista_id, descripcion: p && p.descripcion });
@@ -1402,7 +1575,7 @@ const Demo = {
       return { ok: true, producto: p ? this.conOtra(p) : undefined };
     }
     if (fn === 'foto_marcar') { const p = this.marcar(a.p_producto, a.p_estado); return p ? { ok: true, producto: p } : { ok: false, error: 'producto' }; }
-    if (fn === 'foto_marcar_lote') { const ps = a.p_productos.map(id => this.marcar(id, a.p_estado)).filter(Boolean); return { ok: true, n: ps.length, productos: ps }; }
+    if (fn === 'foto_marcar_lote') { const ps = a.p_productos.filter(id => { const p0 = this.prod.find(x => x.id === id); return p0 && marcables.includes(p0.lista_id); }).map(id => this.marcar(id, a.p_estado)).filter(Boolean); return { ok: true, n: ps.length, productos: ps }; }
     if (fn === 'foto_historial') return { ok: true, eventos: this.eventos.filter(e => !a.p_lista || e.lista_id === a.p_lista).slice(0, a.p_limite || 60) };
     if (fn === 'foto_progreso') return this.listas.filter(l => (a.p_listas || []).includes(l.id)).map(l => this.progreso(l));
     if (fn === 'foto_versiones_listar') return { ok: true, versiones: this.versiones[a.p_lista] || [] };

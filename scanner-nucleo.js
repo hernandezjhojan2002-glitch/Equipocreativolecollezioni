@@ -332,7 +332,7 @@
      MOTOR DE BÚSQUEDA
      ============================================================ */
   N.crearIndice = function (productos) {
-    const porCodigo = new Map(), porBase = new Map(), porSerial = new Map();
+    const porCodigo = new Map(), porBase = new Map(), porSerial = new Map(), porSerialAlnum = new Map();
     const add = (m, k, v) => { if (!k) return; let a = m.get(k); if (!a) m.set(k, a = []); if (!a.some(x => (x.p || x) === (v.p || v))) a.push(v); };
     const lista = productos.filter(p => p.activo !== false);
     lista.forEach(p => {
@@ -343,24 +343,24 @@
         if (cl.length > 6) add(porBase, cl.slice(0, -2), p);
       });
       const s = N.limpiar(p.serial);
-      if (s.length >= 4) { add(porSerial, s, p); add(porSerial, N.alnum(s), p); }
+      if (s.length >= 4) { add(porSerial, s, p); add(porSerialAlnum, N.alnum(s), p); }
     });
-    return { porCodigo, porBase, porSerial, lista };
+    return { porCodigo, porBase, porSerial, porSerialAlnum, lista };
   };
 
   // → { tipo:'exacto'|'otra_talla'|'referencia'|'serial'|'ninguno', codigo, resultados:[{p,talla}] }
-  N.buscar = function (ix, entrada) {
-    const c0 = N.limpiar(entrada);
-    const res = (tipo, arr, extra) => ({ tipo, codigo: c0, resultados: arr, ...(extra || {}) });
-    if (!c0) return res('ninguno', []);
-    const variantes = [c0];
-    if (/^0+\d/.test(c0)) variantes.push(c0.replace(/^0+/, ''));                // EAN leído con ceros de más
-    for (const c of variantes) {
-      let r = ix.porCodigo.get(c); if (r) return res('exacto', r.map(x => ({ p: x.p, talla: x.talla })));
-      r = ix.porBase.get(c); if (r) return res('referencia', r.map(p => ({ p, talla: '' })));
-      if (c.length > 6) { r = ix.porBase.get(c.slice(0, -2)); if (r) return res('otra_talla', r.map(p => ({ p, talla: '' })), { sufijo: c.slice(-2) }); }
-      r = ix.porSerial.get(c) || ix.porSerial.get(N.alnum(c)); if (r) return res('serial', r.map(p => ({ p, talla: '' })));
-    }
+  // Nunca adivina: solo coincidencias EXACTAS del código leído. La única regla extra es la del
+  // negocio (misma referencia, otra talla = mismo código sin los 2 dígitos finales de talla).
+  // "manual" (lo que alguien escribe en Buscar) además acepta el serial sin guiones ni espacios.
+  N.buscar = function (ix, entrada, manual) {
+    const c = N.limpiar(entrada);
+    const res = (tipo, arr, extra) => ({ tipo, codigo: c, resultados: arr, ...(extra || {}) });
+    if (!c) return res('ninguno', []);
+    let r = ix.porCodigo.get(c); if (r) return res('exacto', r.map(x => ({ p: x.p, talla: x.talla })));
+    r = ix.porBase.get(c); if (r) return res('referencia', r.map(p => ({ p, talla: '' })));
+    if (c.length > 6) { r = ix.porBase.get(c.slice(0, -2)); if (r) return res('otra_talla', r.map(p => ({ p, talla: '' })), { sufijo: c.slice(-2) }); }
+    r = ix.porSerial.get(c); if (r) return res('serial', r.map(p => ({ p, talla: '' })));
+    if (manual && ix.porSerialAlnum) { r = ix.porSerialAlnum.get(N.alnum(c)); if (r) return res('serial', r.map(p => ({ p, talla: '' }))); }
     return res('ninguno', []);
   };
 
