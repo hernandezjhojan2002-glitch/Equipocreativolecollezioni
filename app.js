@@ -3798,4 +3798,122 @@ function renderCalendarioSemana(view) {
   view.querySelectorAll('[data-cal-tarea]').forEach(b => b.onclick = () => openTareaModal(b.dataset.calTarea));
 }
 
+/* ============================================================
+   FOTOGRAFÍA · conexión con el Scanner foto (v1)
+   - Las tareas de tipo "Fotografía" creadas desde el scanner muestran
+     el avance en vivo: localizadas, fotografiadas, editadas y subidas,
+     por marca y por persona.
+   - Practicantes: botón "Abrir scanner" en su tarea (misma clave).
+   - La tarea se mueve sola: 1.ª foto → En progreso; 100 % subidas →
+     En revisión (eso lo hace el servidor, migración scanner-foto-v1).
+   ============================================================ */
+STATE.fotoProg = {};
+function esTareaFoto(t) { return !!t && /fotograf/i.test(String(t.tipo || '')); }
+async function cargarProgresoFotos() {
+  const ids = (STATE.tareas || []).filter(esTareaFoto).map(t => String(t.id));
+  if (!ids.length) { STATE.fotoProg = {}; return false; }
+  try {
+    const r = await supa.rpc('foto_progreso', { p_tareas: ids, p_listas: null });
+    if (r.error || !Array.isArray(r.data)) return false;
+    const antes = JSON.stringify(STATE.fotoProg), m = {};
+    r.data.forEach(x => { if (x && x.tarea_id) m[x.tarea_id] = x; });
+    STATE.fotoProg = m;
+    // el refresco automático compara las tareas: así también nota los cambios de fotos
+    (STATE.tareas || []).forEach(t => { const x = m[String(t.id)]; if (x) t._foto = [x.total, x.localizado, x.fotografiado, x.editado, x.subido].join('/'); });
+    return antes !== JSON.stringify(m);
+  } catch (e) { return false; }
+}
+const FOTO_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function fotoNombreMes(m) { const t = String(m || ''); const k = parseInt(t.slice(5, 7), 10); return k ? `${FOTO_MESES[k - 1]} ${t.slice(0, 4)}` : ''; }
+function fotoCuentas(x) {
+  const fot = (x.fotografiado || 0) + (x.editado || 0) + (x.subido || 0);
+  return { total: x.total || 0, loc: (x.localizado || 0) + fot, fot, edi: (x.editado || 0) + (x.subido || 0), sub: x.subido || 0 };
+}
+function fotoBarraHTML(c) {
+  const pc = n => c.total ? (100 * n / c.total).toFixed(1) + '%' : '0%';
+  return `<div class="foto-barra" role="img" aria-label="${c.fot} de ${c.total} fotografiadas, ${c.sub} subidas"><i class="fb-loc" style="width:${pc(c.loc)}"></i><i class="fb-fot" style="width:${pc(c.fot)}"></i><i class="fb-sub" style="width:${pc(c.sub)}"></i></div>`;
+}
+function linkScanner() {
+  if (STATE.mode === 'admin') return 'scanner-foto.html?admin=1';
+  if (STATE.mode === 'aprendiz' && STATE.talentoId) return 'scanner-foto.html?aprendiz=' + encodeURIComponent(STATE.talentoId);
+  return '';
+}
+// Tarjeta del tablero (admin y dirección): barra + números
+function fotoMiniHTML(t) {
+  if (!esTareaFoto(t)) return '';
+  const x = STATE.fotoProg[String(t.id)];
+  if (!x) return '';
+  const c = fotoCuentas(x), l = linkScanner();
+  return `<div class="foto-mini">${fotoBarraHTML(c)}<div class="foto-mini-t"><span><b>${c.fot}</b>/${c.total} fotografiadas · <b>${c.sub}</b> subidas</span>${l ? `<a href="${esc(l)}" target="_blank" rel="noopener">Scanner</a>` : ''}</div></div>`;
+}
+// Tarjeta del practicante: reporte completo + botón al scanner
+function fotoReporteHTML(t) {
+  if (!esTareaFoto(t)) return '';
+  const x = STATE.fotoProg[String(t.id)], l = linkScanner();
+  const boton = l ? `<a class="btn foto-btn" href="${esc(l)}">${ico('check')} Abrir scanner de fotos</a>` : '';
+  if (!x) return boton ? `<div class="foto-rep">${boton}</div>` : '';
+  const c = fotoCuentas(x), pct = n => c.total ? Math.round(100 * n / c.total) + '%' : '0%';
+  const marcas = (x.marcas || []).map(m => `<tr><td>${esc(m.marca)}</td><td>${m.fotografiadas}/${m.total}</td><td>${m.subidas}</td></tr>`).join('');
+  const personas = (x.personas || []).map(p => `${esc(p.nombre)} ${p.fotos}`).join(' · ');
+  return `<div class="foto-rep">
+    <div class="foto-rep-h"><b>Avance de fotografía</b><span>${esc(x.nombre || '')}${x.mes ? ' · ' + esc(fotoNombreMes(x.mes)) : ''}</span></div>
+    ${fotoBarraHTML(c)}
+    <div class="foto-kpis"><div><b>${c.loc}</b><span>Localizadas · ${pct(c.loc)}</span></div><div><b>${c.fot}</b><span>Fotografiadas · ${pct(c.fot)}</span></div>
+      <div><b>${c.edi}</b><span>Editadas · ${pct(c.edi)}</span></div><div><b>${c.sub}</b><span>Subidas · ${pct(c.sub)}</span></div></div>
+    <p class="foto-pie">${c.total} referencias · faltan ${c.total - c.fot} por fotografiar${x.ultimo ? ' · último cambio ' + esc(haceCO(x.ultimo)) : ''}</p>
+    ${marcas ? `<details class="foto-det"><summary>Por marca</summary><table><thead><tr><th>Marca</th><th>Fotog.</th><th>Subidas</th></tr></thead><tbody>${marcas}</tbody></table></details>` : ''}
+    ${personas ? `<p class="foto-pie">Fotos por persona: ${personas}</p>` : ''}
+    ${boton}
+  </div>`;
+}
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `
+  .foto-mini{margin:8px 0 2px;}
+  .foto-mini-t{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--ink-2);margin-top:5px;}
+  .foto-mini-t b{color:var(--ink);font-weight:500;}
+  .foto-barra{height:6px;border-radius:999px;background:var(--sunken);overflow:hidden;position:relative;}
+  .foto-barra>i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;}
+  .foto-barra .fb-loc{background:var(--line-strong);} .foto-barra .fb-fot{background:var(--ok);opacity:.55;} .foto-barra .fb-sub{background:var(--ok);}
+  .foto-rep{margin:12px 0;padding:14px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);}
+  .foto-rep-h{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:13.5px;}
+  .foto-rep-h b{font-weight:500;} .foto-rep-h span{color:var(--ink-2);}
+  .foto-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:10px 0 6px;}
+  @media (min-width:560px){.foto-kpis{grid-template-columns:repeat(4,1fr);}}
+  .foto-kpis div{background:var(--panel);border-radius:8px;padding:8px 10px;}
+  .foto-kpis b{display:block;font-size:20px;font-weight:500;line-height:1.1;}
+  .foto-kpis span{font-size:11.5px;color:var(--ink-2);}
+  .foto-pie{font-size:12.5px;color:var(--ink-2);margin:6px 0;}
+  .foto-det summary{cursor:pointer;font-size:12.5px;color:var(--ink-2);margin:6px 0;}
+  .foto-det table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .foto-det th,.foto-det td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);}
+  .foto-btn{margin-top:10px;width:100%;justify-content:center;text-decoration:none;}`;
+  document.head.appendChild(css);
+
+  const _loadAll = loadAll;
+  loadAll = async function () { const r = await _loadAll.apply(this, arguments); if (STATE.mode === 'admin') await cargarProgresoFotos(); return r; };
+  const _cargarAprendiz = cargarAprendiz;
+  cargarAprendiz = async function () { const r = await _cargarAprendiz.apply(this, arguments); if (r && r.ok) await cargarProgresoFotos(); return r; };
+  const _cargarDireccion = cargarDireccion;
+  cargarDireccion = async function () { const r = await _cargarDireccion.apply(this, arguments); if (r && r.ok) await cargarProgresoFotos(); return r; };
+
+  const _sello = selloKanban;
+  selloKanban = function (t) { return _sello(t) + fotoMiniHTML(t); };
+  const _stepper = stepperHTML;
+  stepperHTML = function (t) { return _stepper(t) + fotoReporteHTML(t); };
+
+  // Admin: cada escaneo actualiza el reporte en vivo (con pausa para no redibujar a cada segundo)
+  const _sub = subscribeRealtime;
+  subscribeRealtime = function (cb) {
+    _sub(cb);
+    if (STATE.mode !== 'admin' || STATE._canalFoto) return;
+    STATE._canalFoto = supa.channel('cambios-foto');
+    STATE._canalFoto.on('postgres_changes', { event: '*', schema: 'public', table: 'foto_productos' }, () => {
+      clearTimeout(STATE._tFoto);
+      STATE._tFoto = setTimeout(async () => { if (await cargarProgresoFotos() && STATE._refrescar) STATE._refrescar(); }, 1500);
+    });
+    STATE._canalFoto.subscribe();
+  };
+})();
+
 boot();
