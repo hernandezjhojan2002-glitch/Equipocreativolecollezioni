@@ -15,13 +15,42 @@
   N.limpiar = s => String(s == null ? '' : s).toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9\-\/.]/g, '');
   N.alnum = s => N.limpiar(s).replace(/[^A-Z0-9]/g, '');
 
+  /* ---------- pasos de la foto (los mismos del Excel de digital) ----------
+     Sin foto → (Localizada: ya la ubicaron en tienda) → Foto tomada → Foto descargada
+     → En el drive → Subida en página.  "Localizada" solo existe en la app. */
   N.ESTADOS = [
-    ['pendiente', 'Pendiente'], ['localizado', 'Localizada'], ['fotografiado', 'Fotografiada'],
-    ['editado', 'Editada'], ['subido', 'Subida']
+    ['pendiente', 'Sin foto'], ['localizado', 'Localizada'], ['fotografiado', 'Foto tomada'],
+    ['descargada', 'Foto descargada'], ['drive', 'En el drive'], ['subido', 'Subida en página']
   ];
-  N.ORDEN = { pendiente: 0, localizado: 1, fotografiado: 2, editado: 3, subido: 4 };
-  N.etiquetaEstado = k => (N.ESTADOS.find(e => e[0] === k) || [k, k])[1];
-  N.yaFotografiada = p => N.ORDEN[p.estado] >= 2;
+  N.CORTO = { pendiente: 'Sin foto', localizado: 'Localizada', fotografiado: 'Tomada', descargada: 'Descargada', drive: 'En drive', subido: 'En página' };
+  // 'editado' es el nombre viejo de 'descargada' (datos guardados en el teléfono antes de la v4)
+  N.ORDEN = { pendiente: 0, localizado: 1, fotografiado: 2, descargada: 3, editado: 3, drive: 4, subido: 5 };
+  N.normEstado = e => e === 'editado' ? 'descargada' : (e || 'pendiente');
+  N.etiquetaEstado = k => (N.ESTADOS.find(e => e[0] === N.normEstado(k)) || [k, k])[1];
+  N.etiquetaCorta = k => N.CORTO[N.normEstado(k)] || k;
+  N.yaFotografiada = p => N.ORDEN[p.estado] >= 2;          // ya tiene foto (tomada o más)
+  N.enDrive = p => N.ORDEN[p.estado] >= 4;                 // el trabajo de fotografía ya terminó
+
+  // Texto de la lista desplegable del Excel → paso de la app
+  N.estadoDeTexto = function (v) {
+    const t = N.norm(v).replace(/[.:;]+$/, '').trim();
+    if (!t || t.length > 40) return null;
+    if (/^(no tienen? foto|sin foto|falta(n)? foto|pendiente)/.test(t)) return 'pendiente';
+    if (/^(foto tomada|fotos tomadas|tomada|fotografiad)/.test(t)) return 'fotografiado';
+    if (/^(foto descargada|fotos descargadas|descargad)/.test(t)) return 'descargada';
+    if (/^((foto )?en (el )?drive|drive|subid[oa]s? al drive)/.test(t)) return 'drive';
+    if (/^(subid[oa]s? (en|a) (la )?pagina|en (la )?pagina|publicad|subid[oa]s?$)/.test(t)) return 'subido';
+    return null;
+  };
+  // Conteo por paso: { total, pendiente, localizado, fotografiado, descargada, drive, subido, sin_foto, con_foto, en_drive }
+  N.contarEstados = function (arr, campo) {
+    const c = { total: 0, pendiente: 0, localizado: 0, fotografiado: 0, descargada: 0, drive: 0, subido: 0 };
+    (arr || []).forEach(p => { const e = N.normEstado(p[campo || 'estado']); c.total++; c[e] = (c[e] || 0) + 1; });
+    c.sin_foto = c.pendiente + c.localizado;
+    c.con_foto = c.fotografiado + c.descargada + c.drive + c.subido;
+    c.en_drive = c.drive + c.subido;
+    return c;
+  };
 
   /* ============================================================
      ZIP / XLSX — LECTURA
@@ -244,6 +273,7 @@
     return null;
   }
 
+  N.letraColumna = c => { let t = ''; c++; while (c > 0) { const m = (c - 1) % 26; t = String.fromCharCode(65 + m) + t; c = Math.floor((c - 1) / 26); } return t; };
   N.partirLista = (v, re) => String(v == null ? '' : v).split(re || /[,;|\n]+/).map(s => s.trim()).filter(Boolean);
   N.parsearBodegas = function (v) {
     const out = {}; const re = /([^,()]+?)\s*\(\s*(\d+)\s*\)/g; let m; const s = String(v == null ? '' : v);
@@ -257,16 +287,32 @@
   // hojas → { productos:[...], hojas:[resumen], avisos:[texto] }
   N.parsearLibro = function (hojas) {
     const porRef = new Map(); const resumen = []; const avisos = [];
+    hojas.forEach((h, hn) => { h._n = hn; });
     for (const h of hojas) {
       const enc = buscarEncabezado(h.filas);
       if (!enc) { resumen.push({ nombre: h.nombre, usada: false, productos: 0 }); continue; }
       const cab = h.filas[enc.fila] || [];
       const datos = h.filas.slice(enc.fila + 1);
-      // Columnas extra (Estado en Vault, notas…): solo si tienen datos en 2+ filas o texto
-      const extras = [];
       const nCols = Math.max(cab.length, ...datos.map(f => (f || []).length));
+      // Columna del proceso de la foto (lista desplegable: no tiene foto, foto tomada, en el drive…).
+      // Se reconoce por sus VALORES: muchas veces no tiene título o está corrida de columna.
+      let colEstado = -1, mejor = 0;
       for (let c = 0; c < nCols; c++) {
         if (enc.usadas.has(c)) continue;
+        const vals = datos.map(f => (f || [])[c]).filter(v => v != null && String(v).trim() !== '');
+        const ok = vals.filter(v => N.estadoDeTexto(v)).length;
+        if (ok && ok >= vals.length * 0.6 && ok > mejor) { mejor = ok; colEstado = c; }
+      }
+      if (colEstado < 0) {            // columna titulada "Estado de la foto"/"Proceso" aunque todavía esté vacía
+        cab.forEach((t, c) => { if (colEstado < 0 && !enc.usadas.has(c) && /^(estado( de (la )?foto)?|proceso|foto)$/.test(N.norm(t))) {
+          const vals = datos.map(f => (f || [])[c]).filter(v => v != null && String(v).trim() !== '');
+          if (vals.every(v => N.estadoDeTexto(v))) colEstado = c;
+        } });
+      }
+      // Columnas extra (Estado en Vault, notas…): solo si tienen datos en 2+ filas o texto
+      const extras = [];
+      for (let c = 0; c < nCols; c++) {
+        if (enc.usadas.has(c) || c === colEstado) continue;
         const vals = datos.map(f => (f || [])[c]).filter(v => v != null && String(v).trim() !== '');
         if (!vals.length) continue;
         if (vals.length < 2 && /^-?[\d.,]+$/.test(String(vals[0]).trim())) continue;   // bloque de totales
@@ -295,7 +341,9 @@
         const ecoTxt = N.norm(g('ecommerce'));
         const extra = {};
         extras.forEach(x => { const v = f[x.c]; if (v != null && String(v).trim() !== '') extra[x.nombre] = String(v).trim(); });
+        const estadoExcel = colEstado >= 0 ? N.estadoDeTexto(f[colEstado]) : null;
         const prod = {
+          estado_excel: estadoExcel, hoja_n: h._n,
           ref_base: ref, hoja: h.nombre, marca: g('marca') || h.nombre, serial, plu: g('plu'),
           codigos, tallas: tallasArr,
           descripcion: g('descripcion'), bodegas: N.parsearBodegas(g('bodegas')),
@@ -312,13 +360,21 @@
           const b = {}; [...prev.bodegas, ...prod.bodegas].forEach(x => { b[x.b] = (b[x.b] || 0) + x.n; });
           prev.bodegas = Object.entries(b).map(([k, v]) => ({ b: k, n: v }));
           if (prod.cantidad != null) prev.cantidad = (prev.cantidad || 0) + prod.cantidad;
+          if ((N.ORDEN[prod.estado_excel] ?? -1) > (N.ORDEN[prev.estado_excel] ?? -1)) prev.estado_excel = prod.estado_excel;
           prev.alertas = [...new Set([...prev.alertas, ...prod.alertas, `Referencia repetida (hoja ${prod.hoja}, fila ${prod.fila})`])];
           Object.assign(prev.extra, prod.extra);
         } else porRef.set(ref, prod);
       });
-      resumen.push({ nombre: h.nombre, usada: true, productos: n, columnas: Object.keys(enc.mapa), fila_encabezado: enc.fila + 1 });
+      resumen.push({ nombre: h.nombre, usada: true, productos: n, columnas: Object.keys(enc.mapa), fila_encabezado: enc.fila + 1,
+                     columna_estado: colEstado >= 0 ? N.letraColumna(colEstado) : null });
     }
     const productos = [...porRef.values()];
+    // Cuántas hay en cada paso según el Excel, por hoja
+    resumen.forEach(r => { if (r.usada) {
+      const ps = productos.filter(p => p.hoja === r.nombre);
+      r.estados = N.contarEstados(ps.filter(p => p.estado_excel), 'estado_excel');
+      r.sin_dato = ps.filter(p => !p.estado_excel).length;
+    } });
     // serial repetido en referencias distintas
     const porSerial = new Map();
     productos.forEach(p => { const s = N.alnum(p.serial); if (s.length >= 6 && /\d/.test(s)) { if (!porSerial.has(s)) porSerial.set(s, []); porSerial.get(s).push(p); } });

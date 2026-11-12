@@ -3801,10 +3801,10 @@ function renderCalendarioSemana(view) {
 /* ============================================================
    FOTOGRAFÍA · conexión con el Scanner foto (v1)
    - Las tareas de tipo "Fotografía" creadas desde el scanner muestran
-     el avance en vivo: localizadas, fotografiadas, editadas y subidas,
-     por marca y por persona.
+     el avance en vivo con los pasos del Excel de digital (sin foto,
+     foto tomada, descargada, en el drive, subida en página), por hoja.
    - Practicantes: botón "Abrir scanner" en su tarea (misma clave).
-   - La tarea se mueve sola: 1.ª foto → En progreso; 100 % subidas →
+   - La tarea se mueve sola: 1.ª foto → En progreso; 100 % en el drive →
      En revisión (eso lo hace el servidor, migración scanner-foto-v1).
    ============================================================ */
 STATE.fotoProg = {};
@@ -3819,19 +3819,28 @@ async function cargarProgresoFotos() {
     r.data.forEach(x => { if (x && x.tarea_id) m[x.tarea_id] = x; });
     STATE.fotoProg = m;
     // el refresco automático compara las tareas: así también nota los cambios de fotos
-    (STATE.tareas || []).forEach(t => { const x = m[String(t.id)]; if (x) t._foto = [x.total, x.localizado, x.fotografiado, x.editado, x.subido].join('/'); });
+    (STATE.tareas || []).forEach(t => { const x = m[String(t.id)]; if (x) t._foto = [x.total, x.localizado, x.fotografiado, x.descargada, x.drive, x.subido].join('/'); });
     return antes !== JSON.stringify(m);
   } catch (e) { return false; }
 }
 const FOTO_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 function fotoNombreMes(m) { const t = String(m || ''); const k = parseInt(t.slice(5, 7), 10); return k ? `${FOTO_MESES[k - 1]} ${t.slice(0, 4)}` : ''; }
+// Pasos = los del Excel de digital. sin = sin foto · fot = con foto · drv = en el drive o subidas
 function fotoCuentas(x) {
-  const fot = (x.fotografiado || 0) + (x.editado || 0) + (x.subido || 0);
-  return { total: x.total || 0, loc: (x.localizado || 0) + fot, fot, edi: (x.editado || 0) + (x.subido || 0), sub: x.subido || 0 };
+  const n = k => Number(x[k]) || 0;
+  const c = { total: n('total'), pendiente: n('pendiente'), localizado: n('localizado'), fotografiado: n('fotografiado'),
+              descargada: n('descargada') + n('editado'), drive: n('drive'), subido: n('subido') };
+  c.sin = c.pendiente + c.localizado; c.fot = c.fotografiado + c.descargada + c.drive + c.subido; c.drv = c.drive + c.subido;
+  return c;
 }
 function fotoBarraHTML(c) {
-  const pc = n => c.total ? (100 * n / c.total).toFixed(1) + '%' : '0%';
-  return `<div class="foto-barra" role="img" aria-label="${c.fot} de ${c.total} fotografiadas, ${c.sub} subidas"><i class="fb-loc" style="width:${pc(c.loc)}"></i><i class="fb-fot" style="width:${pc(c.fot)}"></i><i class="fb-sub" style="width:${pc(c.sub)}"></i></div>`;
+  const pc = n => c.total ? (100 * n / c.total).toFixed(2) + '%' : '0%';
+  return `<div class="foto-barra" role="img" aria-label="${c.fot} de ${c.total} con foto, ${c.drv} en el drive">${
+    ['fotografiado', 'descargada', 'drive', 'subido', 'localizado'].map(k => c[k] ? `<i class="fb-${k}" style="width:${pc(c[k])}"></i>` : '').join('')}</div>`;
+}
+const FOTO_PASOS = [['pendiente', 'Sin foto'], ['fotografiado', 'Foto tomada'], ['descargada', 'Descargada'], ['drive', 'En el drive'], ['subido', 'En página']];
+function fotoChipsHTML(c) {
+  return `<span class="foto-cuenta">${FOTO_PASOS.filter(([k]) => (k === 'pendiente' ? c.sin : c[k])).map(([k, l]) => `<span class="fb-${k}"><i></i><b>${k === 'pendiente' ? c.sin : c[k]}</b> ${esc(l.toLowerCase())}</span>`).join('')}</span>`;
 }
 function linkScanner() {
   if (STATE.mode === 'admin') return 'scanner-foto.html?admin=1';
@@ -3844,7 +3853,7 @@ function fotoMiniHTML(t) {
   const x = STATE.fotoProg[String(t.id)];
   if (!x) return '';
   const c = fotoCuentas(x), l = linkScanner();
-  return `<div class="foto-mini">${fotoBarraHTML(c)}<div class="foto-mini-t"><span><b>${c.fot}</b>/${c.total} fotografiadas · <b>${c.sub}</b> subidas</span>${l ? `<a href="${esc(l)}" target="_blank" rel="noopener">Scanner</a>` : ''}</div></div>`;
+  return `<div class="foto-mini">${fotoBarraHTML(c)}<div class="foto-mini-t"><span><b>${c.sin}</b> sin foto · <b>${c.drv}</b>/${c.total} en el drive</span>${l ? `<a href="${esc(l)}" target="_blank" rel="noopener">Scanner</a>` : ''}</div></div>`;
 }
 // Tarjeta del practicante: reporte completo + botón al scanner
 function fotoReporteHTML(t) {
@@ -3853,15 +3862,14 @@ function fotoReporteHTML(t) {
   const boton = l ? `<a class="btn foto-btn" href="${esc(l)}">${ico('check')} Abrir scanner de fotos</a>` : '';
   if (!x) return boton ? `<div class="foto-rep">${boton}</div>` : '';
   const c = fotoCuentas(x), pct = n => c.total ? Math.round(100 * n / c.total) + '%' : '0%';
-  const marcas = (x.marcas || []).map(m => `<tr><td>${esc(m.marca)}</td><td>${m.fotografiadas}/${m.total}</td><td>${m.subidas}</td></tr>`).join('');
+  const hojas = (x.hojas || []).map(h => { const k = fotoCuentas(h); return `<tr><td>${esc(h.hoja)}</td><td class="n">${k.total}</td><td class="n">${k.sin || '·'}</td><td class="n">${k.fotografiado || '·'}</td><td class="n">${k.descargada || '·'}</td><td class="n">${k.drive || '·'}</td><td class="n">${k.subido || '·'}</td></tr>`; }).join('');
   const personas = (x.personas || []).map(p => `${esc(p.nombre)} ${p.fotos}`).join(' · ');
   return `<div class="foto-rep">
     <div class="foto-rep-h"><b>Avance de fotografía</b><span>${esc(x.nombre || '')}${x.mes ? ' · ' + esc(fotoNombreMes(x.mes)) : ''}</span></div>
     ${fotoBarraHTML(c)}
-    <div class="foto-kpis"><div><b>${c.loc}</b><span>Localizadas · ${pct(c.loc)}</span></div><div><b>${c.fot}</b><span>Fotografiadas · ${pct(c.fot)}</span></div>
-      <div><b>${c.edi}</b><span>Editadas · ${pct(c.edi)}</span></div><div><b>${c.sub}</b><span>Subidas · ${pct(c.sub)}</span></div></div>
-    <p class="foto-pie">${c.total} referencias · faltan ${c.total - c.fot} por fotografiar${x.ultimo ? ' · último cambio ' + esc(haceCO(x.ultimo)) : ''}</p>
-    ${marcas ? `<details class="foto-det"><summary>Por marca</summary><table><thead><tr><th>Marca</th><th>Fotog.</th><th>Subidas</th></tr></thead><tbody>${marcas}</tbody></table></details>` : ''}
+    <div class="foto-kpis">${FOTO_PASOS.map(([k, l]) => `<div class="fb-${k}"><b>${k === 'pendiente' ? c.sin : c[k]}</b><span><i></i>${esc(l)}</span></div>`).join('')}</div>
+    <p class="foto-pie">${c.total} referencias · <b>${c.fot}</b> con foto (${pct(c.fot)}) · <b>${c.drv}</b> en el drive (${pct(c.drv)})${x.ultimo ? ' · último cambio ' + esc(haceCO(x.ultimo)) : ''}</p>
+    ${hojas ? `<details class="foto-det" open><summary>Por hoja del Excel</summary><div style="overflow-x:auto;"><table><thead><tr><th>Hoja</th><th class="n">Refs</th><th class="n">Sin foto</th><th class="n">Tomada</th><th class="n">Descarg.</th><th class="n">Drive</th><th class="n">Página</th></tr></thead><tbody>${hojas}</tbody></table></div></details>` : ''}
     ${personas ? `<p class="foto-pie">Fotos por persona: ${personas}</p>` : ''}
     ${boton}
   </div>`;
@@ -3874,7 +3882,7 @@ function fotoPanelInicioHTML() {
     const x = STATE.fotoProg[String(t.id)], c = x ? fotoCuentas(x) : null;
     const enc = t.talento_id ? talentoNombre(t.talento_id) : 'Sin encargado';
     return `<div class="foto-ini-fila"><div class="foto-ini-t"><b>${esc(String(t.titulo || '').replace(/^Fotografía · /, ''))}</b>
-      <span>${esc(enc)}${c ? ` · ${c.fot}/${c.total} fotografiadas · ${c.sub} subidas` : ''}</span></div>${c ? fotoBarraHTML(c) : ''}</div>`;
+      <span>${esc(enc)}${c ? ` · ${c.sin} sin foto · ${c.drv}/${c.total} en el drive` : ''}</span></div>${c ? fotoBarraHTML(c) : ''}</div>`;
   }).join('');
   return `<div class="foto-ini"><div class="foto-ini-h"><div><b>Fotografía de producto</b><span>${tareas.length ? `${tareas.length} colección${tareas.length === 1 ? '' : 'es'} en curso` : 'Sin colecciones en curso'}</span></div>
     <span class="foto-ini-acc"><a class="btn foto-ini-btn" href="scanner-foto.html?admin=1">${ico('scanner')} Abrir scanner</a><button type="button" class="btn secondary foto-ini-btn" id="foto-ir">Links y avance</button></span></div>${filas}</div>`;
@@ -3886,14 +3894,24 @@ function fotoPanelInicioHTML() {
   .foto-mini{margin:8px 0 2px;}
   .foto-mini-t{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--ink-2);margin-top:5px;}
   .foto-mini-t b{color:var(--ink);font-weight:500;}
-  .foto-barra{height:6px;border-radius:999px;background:var(--sunken);overflow:hidden;position:relative;}
-  .foto-barra>i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;}
-  .foto-barra .fb-loc{background:var(--line-strong);} .foto-barra .fb-fot{background:var(--ok);opacity:.55;} .foto-barra .fb-sub{background:var(--ok);}
+  :root{--fst-pendiente:#c9473d;--fst-pendiente-bg:#f8e4e1;--fst-localizado:#b9b9b1;--fst-fotografiado:#8463c9;--fst-descargada:#3d9a5d;--fst-drive:#2f73c6;--fst-subido:#d29a1d;}
+  :root[data-theme="dark"]{--fst-pendiente:#c0463c;--fst-pendiente-bg:rgba(240,149,140,.14);--fst-localizado:#5a5a54;--fst-fotografiado:#7d5cc4;--fst-descargada:#36925a;--fst-drive:#2f6fbe;--fst-subido:#b8840f;}
+  .foto-barra{height:7px;border-radius:999px;background:var(--fst-pendiente-bg);overflow:hidden;display:flex;}
+  .foto-barra>i{display:block;height:100%;flex:none;}
+  .fb-pendiente{--fc:var(--fst-pendiente);} .fb-localizado{--fc:var(--fst-localizado);} .fb-fotografiado{--fc:var(--fst-fotografiado);}
+  .fb-descargada{--fc:var(--fst-descargada);} .fb-drive{--fc:var(--fst-drive);} .fb-subido{--fc:var(--fst-subido);}
+  .foto-barra>i{background:var(--fc);}
+  .foto-cuenta{display:flex;flex-wrap:wrap;gap:3px 12px;font-size:12px;color:var(--ink-2);margin-top:6px;}
+  .foto-cuenta>span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;} .foto-cuenta b{color:var(--ink);font-weight:500;}
+  .foto-cuenta i,.foto-kpis span i{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--fc);flex:none;}
+  .foto-kpis span{display:inline-flex;align-items:center;gap:5px;}
+  .foto-det td.n,.foto-det th.n{text-align:right;} .foto-det th{white-space:nowrap;} .foto-det td:first-child{min-width:104px;}
   .foto-rep{margin:12px 0;padding:14px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);}
   .foto-rep-h{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:13.5px;}
   .foto-rep-h b{font-weight:500;} .foto-rep-h span{color:var(--ink-2);}
   .foto-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:10px 0 6px;}
-  @media (min-width:560px){.foto-kpis{grid-template-columns:repeat(4,1fr);}}
+  .foto-kpis>div:first-child{grid-column:1 / -1;}
+  @media (min-width:560px){.foto-kpis{grid-template-columns:repeat(5,1fr);}.foto-kpis>div:first-child{grid-column:auto;}}
   .foto-kpis div{background:var(--panel);border-radius:8px;padding:8px 10px;}
   .foto-kpis b{display:block;font-size:20px;font-weight:500;line-height:1.1;}
   .foto-kpis span{font-size:11.5px;color:var(--ink-2);}
@@ -3989,7 +4007,9 @@ function fotoResumenHTML(compacto) {
     const enc = t.talento_id ? talentoNombre(t.talento_id) : 'Sin encargado';
     return `<div class="foto-col"><div class="foto-col-h"><b>${esc(t.titulo)}</b>${pillEstadoTarea(t)}</div>
       ${c ? fotoBarraHTML(c) : ''}
-      <div class="foto-mini-t"><span>${c ? `<b>${c.fot}</b>/${c.total} fotografiadas · <b>${c.sub}</b> subidas` : 'Sin datos del scanner todavía'}</span><span>Encargado: ${esc(enc)}</span></div></div>`;
+      ${c ? fotoChipsHTML(c) : ''}
+      <div class="foto-mini-t"><span>${c ? `<b>${c.drv}</b>/${c.total} en el drive` : 'Sin datos del scanner todavía'}</span><span>Encargado: ${esc(enc)}</span></div>
+      ${x && (x.hojas || []).length > 1 ? `<details class="foto-det"><summary>Por hoja (${x.hojas.length})</summary><div style="overflow-x:auto;"><table><thead><tr><th>Hoja</th><th class="n">Refs</th><th class="n">Sin foto</th><th class="n">Tomada</th><th class="n">Descarg.</th><th class="n">Drive</th><th class="n">Página</th></tr></thead><tbody>${x.hojas.map(h => { const k = fotoCuentas(h); return `<tr><td>${esc(h.hoja)}</td><td class="n">${k.total}</td><td class="n">${k.sin || '·'}</td><td class="n">${k.fotografiado || '·'}</td><td class="n">${k.descargada || '·'}</td><td class="n">${k.drive || '·'}</td><td class="n">${k.subido || '·'}</td></tr>`; }).join('')}</tbody></table></div></details>` : ''}</div>`;
   }).join('');
 }
 function renderAdminFotografia() {
@@ -4004,6 +4024,14 @@ function renderAdminFotografia() {
       <a class="btn secondary" href="${esc(urlScanner('?admin=1#admin'))}" target="_blank" rel="noopener">${ico('talentos')} Asesores, Drive y ajustes</a></div>
     <div class="section-title">Colecciones activas</div>
     <div class="foto-panel">${fotoResumenHTML()}</div>
+    <div class="section-title">Para tu jefe · ver el avance</div>
+    <div class="foto-panel">
+      <div class="foto-link"><div class="foto-link-t"><b>Link de dirección (recomendado)</b>
+        <span>Es el mismo link de dirección de Equipo Creativo. Ahora trae la sección <b>Fotografía</b> en vivo: cuántas faltan por hoja, qué está en el drive y qué está subido en página, y dice a qué hora se actualizó. Solo lectura.</span></div>
+        <div class="foto-link-a"><button type="button" class="btn small" id="foto-ir-links">Ir a Links y respaldo → Vista de dirección</button></div></div>
+      <div id="foto-hoja-avance"><p class="hint">Cargando la hoja de cálculo de avance…</p></div>
+      <p class="hint" style="margin-top:8px;">El Excel de digital no se toca: sigue igual para gerentes, página web y sistemas. El scanner solo lo lee.</p>
+    </div>
     <div class="section-title">Links</div>
     <div class="foto-panel">
       ${fotoFilaLink('Tú (administrador)', 'Entras con tu correo y contraseña de Equipo Creativo. Puedes todo: crear colecciones, marcar, ver reportes y dar accesos.', admin)}
@@ -4023,14 +4051,27 @@ function renderAdminFotografia() {
     <div class="foto-panel foto-como">
       <ol>
         <li><b>Digital deja el Excel en el Drive</b> (como "fotos pendientes Dackel").</li>
-        <li><b>El puente (Apps Script) lo abre con tu cuenta de Google</b>. El scanner, por estar en otra página, no puede entrar al Drive solo; el puente es un mensajero que vive dentro de Google, lee el archivo con tus permisos y se lo entrega. Solo responde si recibe tu frase secreta (CLAVE) y no modifica nada en el Drive.</li>
-        <li><b>El scanner lee las columnas</b> (Ref base, Serial, Códigos, Tallas, Bodegas…) y guarda la colección del mes en Supabase, la misma base de Equipo Creativo.</li>
+        <li><b>El puente (Apps Script) lo abre con tu cuenta de Google</b>. El scanner, por estar en otra página, no puede entrar al Drive solo; el puente es un mensajero que vive dentro de Google, lee el archivo con tus permisos y se lo entrega. Solo responde si recibe tu frase secreta (CLAVE). Lo único que escribe es el paso en la columna de proceso (solo si el archivo es Hoja de Google, solo en la lista desplegable y solo avanzando), para que quien abra la hoja vea el avance.</li>
+        <li><b>El scanner lee cada hoja</b> (Ref base, Serial, Códigos, Tallas, Bodegas…) y también la <b>columna del proceso</b> que llena digital (no tiene foto, foto tomada, foto descargada, en el drive, subido en la página). Lo guarda en Supabase, la misma base de Equipo Creativo, y cuenta el avance por hoja. Lo que dice el Excel solo hace avanzar: si en la app ya va más adelante, se respeta.</li>
         <li><b>Se relee solo</b> cada vez que alguien con permiso abre el scanner (si pasaron más de 10 min) o con el botón ⟳. Si digital agrega o quita referencias, se ve en "Qué cambió en el Excel" y el avance no se pierde.</li>
         <li><b>Carpeta de fotos (opcional):</b> el mismo puente revisa la carpeta de fotos y, si encuentra un archivo con el serial en el nombre, avanza el paso solo.</li>
       </ol>
       <p class="hint">El link del Excel lo pegas una vez por mes en el scanner: Calendario → elige el mes → Agregar Excel. Eso crea aquí la tarea "Fotografía · Mes · Colección" con entrega al cierre del mes.</p>
     </div>`;
   fotoActivarBotones(v);
+  const ir = v.querySelector('#foto-ir-links'); if (ir) ir.onclick = () => irATab('links');
+  fotoHojaAvance();
+}
+// Hoja de Google aparte con el avance (la crea el puente; el link queda guardado en el scanner)
+async function fotoHojaAvance() {
+  const box = document.querySelector('#foto-hoja-avance'); if (!box) return;
+  let url = '';
+  try { const r = await supa.from('foto_config').select('valor').eq('clave', 'hoja_avance_url').maybeSingle(); url = (r && r.data && r.data.valor) || ''; } catch (e) {}
+  box.innerHTML = url
+    ? fotoFilaLink('Hoja de cálculo de avance', 'Hoja de Google aparte (no es el Excel de digital) con el resumen por colección y por hoja, y cada referencia con su paso. Se actualiza sola cada 15 minutos y arriba dice la hora. Compártela con tu jefe como <b>Lector</b>.', url)
+    : `<div class="foto-link"><div class="foto-link-t"><b>Hoja de cálculo de avance</b><span>Todavía no está creada. Se crea en el scanner → Admin → <i>Avance para los jefes</i> → “Crear la hoja de avance” (necesita el puente versión 6).</span></div>
+        <div class="foto-link-a"><a class="btn small secondary" href="${esc(urlScanner('?admin=1#admin'))}" target="_blank" rel="noopener">Abrir Admin del scanner</a></div></div>`;
+  fotoActivarBotones(box);
 }
 (function () {
   const css = document.createElement('style');
@@ -4088,17 +4129,140 @@ function renderAdminFotografia() {
     }
     return r;
   };
-  // Dirección: probar el scanner con datos de ejemplo
+  // Dirección (link del jefe): sección Fotografía en vivo, solo lectura
   const _jefe = renderJefeVista;
   renderJefeVista = function () {
     const r = _jefe.apply(this, arguments);
     const main = document.querySelector('#app main');
-    if (main && !main.querySelector('.foto-home')) {
-      main.insertAdjacentHTML('afterbegin', `<div class="foto-home"><div class="t">${ico('fotografia')}<div><b>Scanner de fotografía</b><span>Pruébalo con datos de ejemplo (no guarda nada). Etiqueta de prueba: 149539691785108.</span></div></div>
-        <div class="a"><a class="btn small secondary" href="${esc(urlScanner('?demo=1&rol=consulta'))}" target="_blank" rel="noopener">Probar scanner</a></div></div>`);
+    if (main && !main.querySelector('#jefe-foto')) {
+      const cards = main.querySelector('#jefe-cards');
+      const html = `<div class="section-title" id="jefe-foto-t">Fotografía de producto</div><div id="jefe-foto" class="foto-dir"><p class="hint">Cargando…</p></div>`;
+      if (cards) cards.insertAdjacentHTML('afterend', html); else main.insertAdjacentHTML('afterbegin', html);
+      fotoDirPintar();
+      if (!STATE.fotoDir.d || Date.now() - STATE.fotoDir.ts > 30000) fotoDirCargar();
     }
     return r;
   };
+})();
+
+/* ============================================================
+   DIRECCIÓN · SECCIÓN FOTOGRAFÍA (solo lectura, se actualiza sola)
+   Lo que marca el encargado en el scanner + lo que dice el Excel de digital.
+   ============================================================ */
+STATE.fotoDir = { d: null, det: {}, mes: '', abierta: '', hoja: '', paso: '', q: '', ts: 0, err: '' };
+const FOTO_TXT = { pendiente: 'Sin foto', localizado: 'Sin foto', fotografiado: 'Foto tomada', descargada: 'Descargada', drive: 'En el drive', subido: 'En página' };
+const FOTO_EXCEL = { pendiente: 'no tiene foto', localizado: 'no tiene foto', fotografiado: 'Foto tomada', descargada: 'Foto descargada', drive: 'En el drive', subido: 'Subido en la pagina' };
+async function fotoDirCargar(listaId) {
+  const F = STATE.fotoDir;
+  const r = await rpcSeguro('foto_direccion', { p_token: STATE.tokenDir || '', p_lista: listaId || null });
+  if (!r || r.ok === false) { F.err = (r && r.error) || 'red'; fotoDirPintar(); return; }
+  F.err = ''; F.d = r; F.ts = Date.now();
+  if (r.lista) F.det[r.lista.id] = { l: r.lista, ts: Date.now() };
+  if (!F.mes) { const act = (r.listas || []).find(l => l.activa) || (r.listas || [])[0]; F.mes = act ? String(act.mes).slice(0, 7) : ''; }
+  fotoDirPintar();
+}
+function fotoDirSondeo() {
+  clearInterval(STATE._fotoDirT);
+  STATE._fotoDirT = setInterval(() => {
+    if (document.hidden || STATE.mode !== 'jefe' || !document.querySelector('#jefe-foto')) return;
+    fotoDirCargar(STATE.fotoDir.abierta || null);
+  }, 60000);
+}
+function fotoDirPintar() {
+  const box = document.querySelector('#jefe-foto'); if (!box) return;
+  const F = STATE.fotoDir, d = F.d;
+  if (F.err && !d) { box.innerHTML = `<p class="hint">${F.err === 'migracion' ? 'La sección de fotografía se activa cuando se corre el SQL nuevo del scanner.' : F.err === 'enlace' ? 'Este link no tiene acceso a fotografía.' : 'No pude cargar el avance de fotografía. Revisa tu internet.'}</p>`; return; }
+  if (!d) { box.innerHTML = '<p class="hint">Cargando…</p>'; return; }
+  const listas = d.listas || [];
+  if (!listas.length) { box.innerHTML = '<p class="hint">Todavía no hay colecciones de fotos.</p>'; return; }
+  const meses = [...new Set(listas.map(l => String(l.mes).slice(0, 7)))].sort().reverse();
+  const delMes = listas.filter(l => String(l.mes).slice(0, 7) === F.mes);
+  const cab = `<div class="foto-dir-h"><span class="hint">Actualizado ${esc(haceCO(d.ahora))} · se actualiza solo cada minuto · solo lectura</span>
+      ${d.hoja_avance ? `<a class="btn small secondary" href="${esc(d.hoja_avance)}" target="_blank" rel="noopener">Hoja de cálculo</a>` : ''}</div>
+    <div class="foto-dir-meses">${meses.map(m => `<button type="button" class="foto-mes ${m === F.mes ? 'on' : ''}" data-foto-mes="${m}">${esc(fotoNombreMes(m + '-01'))}</button>`).join('')}</div>`;
+  const tarjetas = delMes.map(l => {
+    const c = fotoCuentas(l.conteo || {}), pct = n => c.total ? Math.round(100 * n / c.total) + '%' : '0%';
+    const hojas = (l.hojas || []).map(h => { const k = fotoCuentas(h); return `<tr><td>${esc(h.hoja)}</td><td class="n">${k.total}</td><td class="n">${k.sin || '·'}</td><td class="n">${k.fotografiado || '·'}</td><td class="n">${k.descargada || '·'}</td><td class="n">${k.drive || '·'}</td><td class="n">${k.subido || '·'}</td></tr>`; }).join('');
+    const abierta = F.abierta === l.id;
+    return `<div class="foto-col foto-dir-col">
+      <div class="foto-col-h"><b>${esc(l.nombre)} · ${esc(l.mes_nombre || fotoNombreMes(l.mes))}</b><span class="pill dim">${l.activa ? 'En curso' : 'Archivada'}</span></div>
+      <p class="foto-pie">Encargado: <b>${esc(l.encargado || 'sin asignar')}</b> · ${c.total} referencias · último cambio ${esc(l.ultimo ? haceCO(l.ultimo) : '—')} · Excel de digital leído ${esc(l.sincronizada_en ? haceCO(l.sincronizada_en) : '—')}</p>
+      ${fotoBarraHTML(c)}${fotoChipsHTML(c)}
+      <p class="foto-pie"><b>${c.fot}</b> con foto (${pct(c.fot)}) · <b>${c.drv}</b> en el drive (${pct(c.drv)}) · <b>${c.subido}</b> subidas en página</p>
+      ${hojas ? `<details class="foto-det" open><summary>Por hoja del Excel</summary><div style="overflow-x:auto;"><table><thead><tr><th>Hoja</th><th class="n">Refs</th><th class="n">Sin foto</th><th class="n">Tomada</th><th class="n">Descarg.</th><th class="n">Drive</th><th class="n">Página</th></tr></thead><tbody>${hojas}</tbody></table></div></details>` : ''}
+      <div class="foto-dir-acc"><button type="button" class="btn small ${abierta ? '' : 'secondary'}" data-foto-ver="${esc(l.id)}">${abierta ? 'Ocultar referencias' : 'Ver referencias'}</button>
+        <button type="button" class="btn small secondary" data-foto-excel="${esc(l.id)}">Descargar Excel</button></div>
+      ${abierta ? fotoDirDetalle(l.id) : ''}
+    </div>`;
+  }).join('') || '<p class="hint">No hay colecciones en este mes.</p>';
+  box.innerHTML = cab + tarjetas;
+  box.querySelectorAll('[data-foto-mes]').forEach(b => b.onclick = () => { F.mes = b.dataset.fotoMes; F.abierta = ''; fotoDirPintar(); });
+  box.querySelectorAll('[data-foto-ver]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.fotoVer;
+    if (F.abierta === id) { F.abierta = ''; fotoDirPintar(); return; }
+    F.abierta = id; F.hoja = ''; F.paso = ''; F.q = '';
+    if (!F.det[id] || Date.now() - F.det[id].ts > 60000) { b.textContent = 'Cargando…'; await fotoDirCargar(id); } else fotoDirPintar();
+  });
+  box.querySelectorAll('[data-foto-excel]').forEach(b => b.onclick = () => fotoDirExcel(b.dataset.fotoExcel, b));
+  const fh = box.querySelector('#fd-hoja'), fp = box.querySelector('#fd-paso'), fq = box.querySelector('#fd-q');
+  if (fh) fh.onchange = () => { F.hoja = fh.value; fotoDirLista(); };
+  if (fp) fp.onchange = () => { F.paso = fp.value; fotoDirLista(); };
+  if (fq) fq.oninput = () => { F.q = fq.value; fotoDirLista(); };
+  fotoDirSondeo();
+}
+function fotoDirDetalle(id) {
+  const F = STATE.fotoDir, x = F.det[id];
+  if (!x) return '<p class="hint" style="margin-top:10px;">Cargando…</p>';
+  const hojas = [...new Set((x.l.productos || []).map(p => p.hoja || p.marca || '—'))];
+  return `<div class="foto-dir-filtros">
+      <select id="fd-hoja"><option value="">Todas las hojas</option>${hojas.map(h => `<option ${F.hoja === h ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select>
+      <select id="fd-paso"><option value="">Todos los pasos</option><option value="sin" ${F.paso === 'sin' ? 'selected' : ''}>Sin foto</option><option value="fotografiado" ${F.paso === 'fotografiado' ? 'selected' : ''}>Foto tomada</option><option value="descargada" ${F.paso === 'descargada' ? 'selected' : ''}>Descargada</option><option value="drive" ${F.paso === 'drive' ? 'selected' : ''}>En el drive</option><option value="subido" ${F.paso === 'subido' ? 'selected' : ''}>Subidas en página</option></select>
+      <input id="fd-q" placeholder="Buscar referencia o descripción" value="${esc(F.q)}"></div>
+    <div id="fd-lista"></div>`;
+}
+function fotoDirLista() {
+  const F = STATE.fotoDir, x = F.det[F.abierta], cont = document.querySelector('#fd-lista'); if (!x || !cont) return;
+  const q = String(F.q || '').toLowerCase().trim();
+  let arr = (x.l.productos || []).filter(p => (!F.hoja || (p.hoja || p.marca || '—') === F.hoja)
+    && (!F.paso || (F.paso === 'sin' ? (p.estado === 'pendiente' || p.estado === 'localizado') : p.estado === F.paso))
+    && (!q || [p.ref_base, p.serial, p.descripcion, (p.codigos || []).join(' ')].join(' ').toLowerCase().includes(q)));
+  const n = arr.length; arr = arr.slice(0, 300);
+  cont.innerHTML = `<p class="hint" style="margin:8px 0;">${n} referencia${n === 1 ? '' : 's'}${n > 300 ? ' (se muestran 300)' : ''}</p>` + arr.map(p => `<div class="foto-ref">
+      <div class="foto-ref-t"><b>${esc(p.descripcion || p.ref_base)}</b><span class="foto-paso fb-${esc(p.estado === 'localizado' ? 'pendiente' : p.estado)}"><i></i>${esc(FOTO_TXT[p.estado] || p.estado)}</span></div>
+      <span class="hint">${esc(p.hoja || '')} · <span class="mono">${esc(p.ref_base)}</span>${p.serial ? ' · ' + esc(p.serial) : ''}${p.estado_por ? ` · ${esc(p.estado_por)}, ${esc(haceCO(p.estado_en))}` : ''}</span></div>`).join('');
+}
+function fotoDirExcel(id, btn) {
+  const F = STATE.fotoDir;
+  const generar = () => {
+    const x = F.det[id]; if (!x || !window.FotoNucleo) return;
+    const N = window.FotoNucleo, l = x.l;
+    const filas = [['Hoja', 'Marca', 'Ref base', 'Serial', 'Descripción', 'Tallas', 'Proceso', 'Marcado por', 'Cuándo', 'Decía el Excel de digital']];
+    (l.productos || []).forEach(p => filas.push([p.hoja || '', p.marca || '', p.ref_base, p.serial || '', p.descripcion || '', (p.tallas || []).join(', '), FOTO_EXCEL[p.estado] || p.estado, p.estado_por || '', p.estado_en ? momentoCO(p.estado_en) : '', p.estado_excel ? FOTO_EXCEL[p.estado_excel] : '']));
+    const res = [['Hoja', 'Referencias', 'Sin foto', 'Foto tomada', 'Foto descargada', 'En el drive', 'Subido en la pagina']];
+    (l.hojas || []).forEach(h => { const k = fotoCuentas(h); res.push([h.hoja, k.total, k.sin, k.fotografiado, k.descargada, k.drive, k.subido]); });
+    const bytes = N.escribirXlsx([{ nombre: 'Avance', filas }, { nombre: 'Por hoja', filas: res }]);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = `Avance fotos - ${l.mes_nombre || ''} - ${String(l.nombre).replace(/[\\/:*?"<>|]/g, ' ')}.xlsx`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  };
+  const conDatos = async () => { if (!F.det[id]) { btn.textContent = 'Cargando…'; await fotoDirCargar(id); } generar(); };
+  if (window.FotoNucleo) return conDatos();
+  const sc = document.createElement('script'); sc.src = 'scanner-nucleo.js?v=6'; sc.onload = conDatos; document.head.appendChild(sc);
+}
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `
+  .foto-dir-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .foto-dir-meses{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .foto-mes{border:1px solid var(--line-strong,var(--line));background:var(--panel);border-radius:999px;padding:5px 12px;font:inherit;font-size:12.5px;cursor:pointer;color:var(--ink);}
+  .foto-mes.on{background:var(--ink);color:var(--panel);border-color:var(--ink);}
+  .foto-dir-col{margin-bottom:12px;} .foto-dir-acc{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .foto-dir-filtros{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+  .foto-dir-filtros select,.foto-dir-filtros input{min-height:36px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);padding:0 12px;font:inherit;font-size:13px;}
+  .foto-dir-filtros input{flex:1;min-width:180px;}
+  .foto-ref{padding:8px 0;border-top:1px solid var(--line);font-size:13px;} .foto-ref-t{display:flex;justify-content:space-between;gap:10px;}
+  .foto-ref-t b{font-weight:500;} .foto-paso{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-size:12px;color:var(--ink-2);}
+  .foto-paso i{width:8px;height:8px;border-radius:50%;background:var(--fc);display:inline-block;}`;
+  document.head.appendChild(css);
 })();
 
 boot();

@@ -25,10 +25,12 @@ const S = {
   modo: null, persona: null, demo: false, token: '', actor: null, sede: '',
   listas: [], prod: new Map(), ix: N.crearIndice([]), desde: null, puente: null,
   tab: 'escanear', resultado: null, recientes: [], cola: [], enLinea: navigator.onLine,
-  filtros: { sede: '', estado: 'falta', marca: '', lista: '' }, buscar: '', tecladoTexto: false,
+  filtros: { sede: '', estado: 'falta', hoja: '', lista: '' }, buscar: '', tecladoTexto: false,
   reporteLista: '', ultimo: { c: '', t: 0 }, sincronizando: false, _timer: null,
   archivo: [], ixArchivo: new Map(), progreso: {}, repDatos: {}, calMes: '', calAnio: 0, sesionOn: false, sesion: [],
-  permisos: { admin: false, marcar: [] }, demoRol: ''
+  permisos: { admin: false, marcar: [] }, demoRol: '',
+  colaHoja: null, hojaHecho: {}, hojaFalla: {}, hojaNo: {}, tipoArchivo: {}, puenteVersion: undefined, puenteViejo: false,
+  errSync: {}, lecturaExcel: {}, sqlV: 0, hojaAvance: '', resultadoMano: null
 };
 
 /* ---------- utilidades ---------- */
@@ -76,7 +78,8 @@ const ICON = {
   descargar: '<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
-  imagen: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/>'
+  imagen: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/>',
+  mano: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>'
 };
 const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`;
 const logo = h => `<img class="brand-logo-dark" src="${LOGO_LIGHT}" alt="LE COLLEZIONI" style="height:${h}px;width:auto;"><img class="brand-logo-light" src="${LOGO_DARK}" alt="LE COLLEZIONI" style="height:${h}px;width:auto;">`;
@@ -147,7 +150,84 @@ async function enviarCola() {
   } finally { _enviando = false; guardarCola(); }
 }
 window.addEventListener('online', () => { S.enLinea = true; enviarCola(); refrescar(); });
+window.addEventListener('online', () => setTimeout(enviarHoja, 2000));
 window.addEventListener('offline', () => { S.enLinea = false; pintarIndicador(); });
+
+/* ---------- Escribir el paso en la hoja de cálculo de digital (puente v5) ----------
+   Así quien abra la hoja (los jefes, digital) ve el avance sin entrar al scanner.
+   Solo Hojas de Google · solo avanza · solo quien puede marcar · sin internet se reintenta. */
+const PASOS_HOJA = ['fotografiado', 'descargada', 'drive', 'subido'];
+function cargarColaHoja() { S.colaHoja = leer('foto_hoja_cola_v1', true) || []; S.hojaHecho = leer('foto_hoja_hecho_v1', true) || {}; S.hojaFalla = {}; S.hojaNo = {}; S.tipoArchivo = Object.assign(leer('foto_tipos_v1', true) || {}, S.tipoArchivo || {}); }
+function guardarColaHoja() { guardar('foto_hoja_cola_v1', S.colaHoja); guardar('foto_hoja_hecho_v1', S.hojaHecho); }
+function listaEscribible(l) {
+  return !!(l && l.activa && l.origen === 'drive' && l.archivo_id && puedeMarcarLista(l.id) && (S.demo || (S.puente && S.puente.url))
+    && !S.hojaNo[l.id] && S.tipoArchivo[l.archivo_id] === 'sheet' && !S.puenteViejo && !(S.puenteVersion !== undefined && S.puenteVersion < 5));
+}
+function aHoja(ps) {
+  if (!S.colaHoja) cargarColaHoja();
+  let n = 0;
+  (ps || []).forEach(p => {
+    if (!p) return;
+    const e = N.normEstado(p.estado); if (!PASOS_HOJA.includes(e)) return;
+    const l = S.listas.find(x => x.id === p.lista_id); if (!listaEscribible(l)) return;
+    if ((N.ORDEN[S.hojaHecho[p.id]] ?? -1) >= N.ORDEN[e]) return;          // ya se escribió ese paso (o uno más adelante)
+    if ((N.ORDEN[p.estado_excel] ?? -1) >= N.ORDEN[e]) return;             // la hoja ya lo dice
+    if (S.hojaFalla[p.id] === e) return;                                     // ya falló en esta sesión (sin lista, fila no encontrada…)
+    S.colaHoja = S.colaHoja.filter(x => x.id !== p.id);
+    S.colaHoja.push({ id: p.id, lista: l.id, archivo: l.archivo_id, h: p.hoja || '', f: p.fila || 0, r: p.ref_base, e });
+    n++;
+  });
+  if (n) { guardarColaHoja(); clearTimeout(S._tHoja); S._tHoja = setTimeout(enviarHoja, 1200); }
+  return n;
+}
+const ERR_HOJA = { columna: 'no tiene la lista desplegable de proceso', fila: 'no encontré la fila de la referencia', hoja: 'la hoja no existe (¿le cambiaron el nombre?)', opcion: 'la lista desplegable no tiene ese paso' };
+function avisoHojaUnaVez(clave, texto, ms) { S._avisosHoja = S._avisosHoja || {}; if (S._avisosHoja[clave]) return; S._avisosHoja[clave] = 1; toast(texto, ms || 6500); }
+let _enviandoHoja = false;
+async function enviarHoja() {
+  if (!S.colaHoja) cargarColaHoja();
+  if (_enviandoHoja || !S.colaHoja.length || (!S.demo && !(S.puente && S.puente.url))) return;
+  _enviandoHoja = true;
+  const fallas = {}; let escritas = 0;
+  try {
+    const porArchivo = new Map(); S.colaHoja.forEach(x => { if (!porArchivo.has(x.archivo)) porArchivo.set(x.archivo, []); porArchivo.get(x.archivo).push(x); });
+    for (const [archivo, items] of porArchivo) {
+      for (let i = 0; i < items.length; i += 20) {
+        const lote = items.slice(i, i + 20), ids = lote.map(x => x.id);
+        let j;
+        if (S.demo) j = Demo.escribirHoja(lote);
+        else {
+          const u = new URL(S.puente.url); u.searchParams.set('k', S.puente.clave || ''); u.searchParams.set('accion', 'escribir'); u.searchParams.set('id', archivo);
+          u.searchParams.set('datos', JSON.stringify(lote.map(x => ({ h: x.h, f: x.f, r: x.r, e: x.e }))));
+          try { j = await (await fetch(u.toString(), { redirect: 'follow' })).json(); } catch (e) { return; }      // sin internet: se reintenta después
+        }
+        const quitar = () => { S.colaHoja = S.colaHoja.filter(x => !ids.includes(x.id)); };
+        if (j && j.ok && !Array.isArray(j.resultados)) j = { ok: false, error: 'version' };          // puente viejo: no sabe escribir
+        if (!j || !j.ok) {
+          const err = j && j.error;
+          if (err === 'ocupado') return;                                                             // otro está escribiendo: luego
+          quitar();
+          if (err === 'xlsx') { S.tipoArchivo[archivo] = 'xlsx'; lote.forEach(x => { S.hojaNo[x.lista] = true; });
+          }
+          else if (err === 'version') { S.puenteViejo = true; }                                   // puente viejo: el paso queda en la app (el Excel .xlsx no se toca)
+          else avisoHojaUnaVez('err-' + err, 'No pude escribir en la hoja de cálculo (' + (ERR_PUENTE[err] || err || 'error') + ').', 7000);
+          continue;
+        }
+        quitar();
+        (j.resultados || []).forEach((r, k) => {
+          const x = lote[k] || lote.find(y => y.r === r.r); if (!x) return;
+          const p = S.prod.get(x.id);
+          if (r.ok) {
+            S.hojaHecho[x.id] = x.e; if (!r.igual) escritas++;
+            if (p) { const ya = N.estadoDeTexto(r.antes); p.estado_excel = r.igual && ya ? ya : x.e; }
+          } else { S.hojaFalla[x.id] = x.e; const k2 = x.h + '|' + r.error; fallas[k2] = (fallas[k2] || 0) + 1; }
+        });
+      }
+    }
+  } finally { _enviandoHoja = false; guardarColaHoja(); guardarCache(); }
+  if (escritas) toast(`Hoja de cálculo actualizada · ${escritas} referencia${escritas === 1 ? '' : 's'}`, 3000);
+  Object.entries(fallas).forEach(([k, n]) => { const [h, err] = k.split('|'); avisoHojaUnaVez('f-' + k, `No se escribió en la hoja “${h}”: ${ERR_HOJA[err] || err} (${n}).`, 7000); });
+  repintarSuave();
+}
 
 /* ---------- datos ---------- */
 function reconstruirIndice() { S.ix = N.crearIndice([...S.prod.values()]); }
@@ -194,6 +274,7 @@ function fusionarProducto(p) {
 }
 function aplicarDatos(r) {
   S.actor = r.actor || S.actor; S.puente = r.puente || null;
+  S.sqlV = r.v || 0; S.hojaAvance = r.hoja_avance || '';
   if (r.permisos) S.permisos = r.permisos;
   S.listas = r.listas || [];
   if (r.archivo) { S.archivo = r.archivo; construirArchivo(); }
@@ -227,7 +308,7 @@ async function cargarDatos(completo) {
   pintarIndicador();
   return r;
 }
-async function refrescar() { if (document.hidden || !S.actor) return; await enviarCola(); await cargarDatos(false); }
+async function refrescar() { if (document.hidden || !S.actor) return; await enviarCola(); await cargarDatos(false); enviarHoja(); }
 function iniciarRefresco() {
   clearInterval(S._timer); S._timer = setInterval(refrescar, REFRESCO_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescar(); });
@@ -251,33 +332,47 @@ async function traerDeDrive(lista) {
   try { const res = await fetch(u.toString(), { redirect: 'follow' }); j = await res.json(); }
   catch (e) { throw new Error('No pude conectar con el puente de Drive. Revisa internet o el link del puente.'); }
   if (!j || !j.ok) throw new Error(ERR_PUENTE[j && j.error] || 'El puente de Drive respondió con un error.');
+  if (j.tipo) { S.tipoArchivo[lista.archivo_id] = j.tipo; guardar('foto_tipos_v1', S.tipoArchivo); }
+  S.puenteVersion = j.version || 0;
   return base64ABytes(j.xlsx);
 }
 async function sincronizarLista(lista, bytes, silencioso) {
   const hojas = await N.leerXlsx(bytes);
   const r = N.parsearLibro(hojas);
+  S.lecturaExcel[lista.id] = { hojas: r.hojas, cuando: ahoraIso() };
   if (!r.productos.length) throw new Error('No encontré referencias en ese Excel (revisa que tenga columnas como "Ref base" o "Códigos").');
   const s = await rpc('foto_sync', { p_token: tok(), p_lista: lista.id, p_productos: r.productos });
   if (!s.ok) throw new Error(s.error === 'permiso' ? 'No tienes permiso para actualizar listas.' : s.error === 'red' ? 'Sin conexión: intenta de nuevo.' : 'No pude guardar la lista (' + s.error + ').');
+  if (!s.v && !S.demo) S.sqlV = 0;                                    // el servidor todavía tiene el SQL viejo
   await cargarDatos(false);
+  // Lo que se marcó en la app y la hoja todavía no dice (sin internet, carpeta de fotos, memoria…): se escribe
+  aHoja([...S.prod.values()].filter(p => p.lista_id === lista.id));
   if (!silencioso || s.nuevos || s.quitados) {
     const partes = [`${s.total} referencias`]; if (s.nuevos) partes.push(`${s.nuevos} nuevas`); if (s.quitados) partes.push(`${s.quitados} ya no están`);
+    if (s.excel) partes.push(`${s.excel} avanzaron según el Excel`);
     if (s.memoria) partes.push(`${s.memoria} ya subidas en otra colección`);
     toast(`${lista.nombre}: ${partes.join(' · ')}`, 4000);
   }
-  if (!silencioso) mostrarCambiosSync(lista, s);
+  if (!silencioso) mostrarCambiosSync(lista, s, r);
   S.repDatos = {};
   return { s, r };
 }
 async function autoSincronizar() {
   if (!puedeMarcarAlgo() || S.sincronizando) return;
   if (!S.demo && !(S.puente && S.puente.url)) return;
+  const versionNueva = !S.demo && leer('foto_ver_sync') !== VER_JS;          // app recién actualizada: se relee todo una vez
   const viejas = S.listas.filter(l => l.activa && l.origen === 'drive' && l.archivo_id && puedeMarcarLista(l.id) &&
-    (!l.sincronizada_en || Date.now() - new Date(l.sincronizada_en).getTime() > SYNC_DRIVE_MIN * 60000));
+    (versionNueva || !l.sincronizada_en || Date.now() - new Date(l.sincronizada_en).getTime() > SYNC_DRIVE_MIN * 60000));
   if (viejas.length) {
     S.sincronizando = true; pintarIndicador();
-    try { for (const l of viejas) { try { await sincronizarLista(l, await traerDeDrive(l), true); } catch (e) { console.warn('Drive', e); } } }
-    finally { S.sincronizando = false; pintarIndicador(); }
+    try {
+      for (const l of viejas) {
+        try { await sincronizarLista(l, await traerDeDrive(l), true); delete S.errSync[l.id]; }
+        catch (e) { S.errSync[l.id] = { msg: e.message || 'error', cuando: ahoraIso() }; }
+      }
+      if (versionNueva) guardar('foto_ver_sync', VER_JS);
+    }
+    finally { S.sincronizando = false; pintarIndicador(); pintarEstadoLista(); }
   }
   revisarCarpetas(false);
 }
@@ -286,7 +381,7 @@ async function actualizarTodoDesdeDrive() {
   const ls = S.listas.filter(l => l.activa && l.origen === 'drive' && l.archivo_id && puedeMarcarLista(l.id));
   if (!ls.length) { await cargarDatos(true); toast('Datos al día'); return; }
   S.sincronizando = true; pintarIndicador(); toast('Leyendo el Excel del Drive…', 6000);
-  try { for (const l of ls) { try { await sincronizarLista(l, await traerDeDrive(l)); } catch (e) { toast(e.message, 5000); } } }
+  try { for (const l of ls) { try { await sincronizarLista(l, await traerDeDrive(l)); delete S.errSync[l.id]; } catch (e) { S.errSync[l.id] = { msg: e.message || 'error', cuando: ahoraIso() }; toast(e.message, 5000); } } }
   finally { S.sincronizando = false; pintarIndicador(); repintarSuave(); }
   guardar('foto_drive_ult', '0'); revisarCarpetas(false);
 }
@@ -350,6 +445,7 @@ const Cam = {
     if (!c) {
       if (this._l && ahora - this._l.ms > 900) this._l = null;
       if (ahora - (this.ultimaLectura || ahora) > 7000) avisoLectura('lejos');
+      Mano.intentarAuto();                                            // ¿hay un Cod ref escrito a mano?
       return;
     }
     const t = N.limpiar(c.t);
@@ -397,6 +493,106 @@ const Cam = {
     this.stream = null; this.track = null; this.linternaOn = false;
   }
 };
+/* ============================================================
+   CÓDIGO ESCRITO A MANO (Cod ref con esfero, sin código de barras)
+   La lectura corre en un worker (scanner-ocr.js) y SOLO acepta códigos que
+   existen en la lista, con margen amplio. Siempre se pide confirmar.
+   ============================================================ */
+const VER_JS = ((document.currentScript && document.currentScript.src.match(/[?&]v=([^&]+)/)) || [])[1] || '';
+const Mano = {
+  w: null, n: 0, espera: new Map(), ocupado: false, firma: '', ultimoAuto: 0, vacios: 0, previo: null,
+  worker() {
+    if (this.w) return this.w;
+    this.w = new Worker('scanner-ocr.js' + (VER_JS ? '?v=' + VER_JS : ''));
+    this.w.onmessage = e => { const f = this.espera.get(e.data.id); if (f) { this.espera.delete(e.data.id); f(e.data); } };
+    this.w.onerror = () => { this.espera.forEach(f => f({ ok: false, motivo: 'error' })); this.espera.clear(); this.w = null; };
+    return this.w;
+  },
+  candidatos() {
+    const c = [], visto = new Set();
+    for (const p of S.prod.values()) {
+      (p.codigos || []).forEach((cod, i) => { const t = String(cod); if (/^\d{8,16}$/.test(t) && !visto.has(t)) { visto.add(t); c.push({ s: t, ref: p.ref_base, id: p.id, tipo: 'codigo', talla: (p.tallas || [])[i] || '' }); } });
+      const r = String(p.ref_base || ''); if (/^\d{8,16}$/.test(r) && !visto.has(r)) { visto.add(r); c.push({ s: r, ref: p.ref_base, id: p.id, tipo: 'referencia', talla: '' }); }
+    }
+    return c;
+  },
+  // fuente: <video> o <img>. Gris con el canal más oscuro (el esfero azul resalta)
+  gris(fuente, ancho, alto, max) {
+    const k = Math.min(1, (max || 1400) / Math.max(ancho, alto)), W = Math.max(1, Math.round(ancho * k)), H = Math.max(1, Math.round(alto * k));
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d', { willReadFrequently: true }); ctx.drawImage(fuente, 0, 0, W, H);
+    const d = ctx.getImageData(0, 0, W, H).data, g = new Uint8Array(W * H);
+    for (let i = 0, j = 0; i < W * H; i++, j += 4) { const r = d[j], gg = d[j + 1], b = d[j + 2]; g[i] = r < gg ? (r < b ? r : b) : (gg < b ? gg : b); }
+    return { g, W, H };
+  },
+  leer(img, op) {
+    op = op || {};
+    const cands = this.candidatos(); if (!cands.length) return Promise.resolve({ ok: false, motivo: 'sin_lista' });
+    const firma = S.prod.size + ':' + cands.length + ':' + (S.desde || '');
+    const id = ++this.n, msg = { id, gris: img.g, W: img.W, H: img.H, rot: op.rot || [0, 90, 270, 180], tiempoMax: op.tiempoMax || 0 };
+    if (firma !== this.firma) { msg.cands = cands; msg.firma = firma; this.firma = firma; }
+    return new Promise(res => {
+      this.espera.set(id, res);
+      try { this.worker().postMessage(msg, [img.g.buffer]); } catch (e) { this.espera.delete(id); this.firma = ''; res({ ok: false, motivo: 'error' }); }
+      setTimeout(() => { if (this.espera.has(id)) { this.espera.delete(id); res({ ok: false, motivo: 'tiempo' }); } }, 20000);
+    });
+  },
+  // Botón ✎ de la cámara: lee el cuadro actual
+  async desdeCamara(manual) {
+    const v = Cam.video; if (!v || !v.videoWidth || this.ocupado) return;
+    this.ocupado = true;
+    if (manual) { Cam.pausar(8000); avisoLectura('mano'); }
+    try {
+      const r = await this.leer(this.gris(v, v.videoWidth, v.videoHeight, manual ? 1400 : 1100), { rot: manual ? [0, 90, 270, 180] : [0, 90, 270], tiempoMax: manual ? 0 : 2500 });
+      if (manual) { Cam.pausar(0); avisoLectura(''); return this.resultado(r, true); }
+      // automático: el mismo código dos veces seguidas antes de mostrarlo
+      if (r.ok && r.mejor) {
+        this.vacios = 0;
+        if (this.previo && this.previo.s === r.mejor.s && Date.now() - this.previo.t < 8000) { this.previo = null; this.resultado(r, false); }
+        else this.previo = { s: r.mejor.s, t: Date.now() };
+      } else this.vacios = r.motivo === 'sin_texto' ? this.vacios + 1 : 0;
+    } finally { this.ocupado = false; this.ultimoAuto = Date.now(); }
+  },
+  intentarAuto() {
+    if (this.ocupado || S.resultadoMano || document.hidden || !S.prod.size) return;
+    const espera = this.vacios >= 3 ? 7000 : 2600;
+    if (Date.now() - this.ultimoAuto < espera || Date.now() - (Cam.ultimaLectura || 0) < 3500) return;
+    this.desdeCamara(false);
+  },
+  resultado(r, manual) {
+    if (r.ok && r.mejor && S.prod.get(r.mejor.id)) {
+      Sonido.ya();
+      S.resultadoMano = { s: r.mejor.s, id: r.mejor.id, tipo: r.mejor.tipo, talla: r.tallaSegura ? r.mejor.talla : '', lectura: r.lectura };
+      Cam.pausar(60000);
+      if (S.tab !== 'escanear') { S.tab = 'escanear'; pintar(); } else pintarResultado();
+      return true;
+    }
+    if (manual) {
+      const leido = (r.lectura || '').replace(/\D/g, '');
+      hoja(`<h3>No pude leer el código escrito con seguridad</h3>
+        <p class="hint" style="margin-bottom:10px;">Solo acepto un código cuando coincide sin dudas con uno de la lista, para no confundir referencias.</p>
+        <ul class="refs" style="margin-bottom:12px;"><li>Acerca la etiqueta: que el número llene el recuadro y quede derecho.</li><li>Busca buena luz, sin sombra ni reflejo.</li><li>O tómale una foto quieta con el botón ${ico('imagen')}.</li></ul>
+        ${leido.length >= 6 ? `<p class="hint">Alcancé a ver algo como <span class="mono">${esc(leido)}</span> (puede tener errores).</p>` : ''}
+        <div class="fila" style="margin-top:12px;"><button class="btn" data-acc="mano">${ico('mano')} Intentar otra vez</button><button class="btn sec" data-acc="mano-buscar" data-q="${esc(leido.slice(0, 13))}">${ico('buscar')} Escribirlo en Buscar</button></div>`);
+    }
+    return false;
+  }
+};
+function tarjetaManuscrito(m) {
+  const p = S.prod.get(m.id); if (!p) return '';
+  const ref = String(p.ref_base || ''), s = m.s, resto = s.startsWith(ref) ? s.slice(ref.length) : '';
+  return `<div class="res warn" role="status" aria-live="polite">
+    <div class="res-banda">${ico('mano')} Leído a mano · confírmalo</div>
+    <div class="res-cuerpo">
+      <p class="hint" style="margin-bottom:6px;">Compara número por número con lo escrito en la etiqueta:</p>
+      <div class="codigo-mano mono">${esc(resto ? ref : s)}${resto ? `<span>${esc(resto)}</span>` : ''}</div>
+      ${m.talla ? `<div class="nota-talla ok">Talla ${esc(m.talla)}</div>` : resto ? '<div class="nota-talla">La talla (últimos números) no se leyó con seguridad; la referencia sí.</div>' : ''}
+      <div class="res-marca">${esc(p.marca || p.hoja || '')}</div>
+      <div class="res-desc">${esc(p.descripcion || 'Sin descripción')}</div>
+      <div class="res-acc" style="margin-top:12px;"><button class="btn ok" data-acc="mano-ok">${ico('check')} Sí, es este</button><button class="btn sec" data-acc="mano-no">No es</button></div>
+    </div></div>`;
+}
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) Cam.detener();
   else if (S.tab === 'escanear' && S.actor && !S.camPausada) setTimeout(encenderCamara, 150);
@@ -454,7 +650,8 @@ const AYUDA = {
   '': 'Apunta al código de barras de la etiqueta o de la caja',
   leyendo: 'Leyendo… mantén el celular quieto',
   inestable: 'Pon el celular más estable: el código no se leyó igual',
-  lejos: 'Acerca el código hasta que llene el recuadro y mantén el celular quieto'
+  lejos: 'Acerca el código hasta que llene el recuadro. Si está escrito a mano, toca ✎',
+  mano: 'Leyendo el código escrito… mantén el celular quieto'
 };
 let _avisoHasta = 0;
 function avisoLectura(tipo) {
@@ -465,27 +662,40 @@ function avisoLectura(tipo) {
   a.textContent = AYUDA[tipo] || AYUDA[''];
   a.classList.toggle('alerta', tipo === 'inestable');
 }
+async function manoDeFoto(file) {
+  const url = URL.createObjectURL(file);
+  try { const img = new Image(); img.src = url; await img.decode();
+    const r = await Mano.leer(Mano.gris(img, img.naturalWidth, img.naturalHeight, 1600), { rot: [0, 90, 270, 180] });
+    return r.ok && r.mejor && S.prod.get(r.mejor.id) ? { s: r.mejor.s, id: r.mejor.id, tipo: r.mejor.tipo, talla: r.tallaSegura ? r.mejor.talla : '', lectura: r.lectura } : null;
+  } catch (e) { return null; } finally { URL.revokeObjectURL(url); }
+}
 function pedirFotos() { const i = $('#foto-in'); if (!i) return; i.value = ''; i.click(); }
 async function leerFotos(files) {
   files = [...(files || [])].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp|gif)$/i.test(f.name)).slice(0, 30);
   if (!files.length) return;
   Cam.pausar(4000);
   toast(files.length > 1 ? `Leyendo ${files.length} fotos…` : 'Leyendo la foto…', 15000);
-  const res = [];
+  const res = []; S._manoFotos = [];
   for (const f of files) {
     let cods = [], dudoso = false;
     try { const r = await codigosDeImagen(f); cods = r.codigos; dudoso = r.dudoso; } catch (e) {}
-    if (!cods.length) { res.push({ nombre: f.name, codigo: null, dudoso }); continue; }
+    if (!cods.length) {
+      const m = await manoDeFoto(f);
+      if (m) { S._manoFotos.push(m); res.push({ nombre: f.name, codigo: m.s, mano: S._manoFotos.length - 1, idMano: m.id }); continue; }
+      res.push({ nombre: f.name, codigo: null, dudoso }); continue;
+    }
     for (const c of cods) { S.ultimo = { c: '', t: 0 }; alDetectar(c, 'foto'); res.push({ nombre: f.name, codigo: N.limpiar(c), id: S.resultado && S.resultado.p && S.resultado.p.id, archivo: !!(S.resultado && S.resultado.archivo) }); }
   }
   $$('.toast').forEach(t => t.remove());
+  if (files.length === 1 && res[0].mano != null) { S.resultadoMano = S._manoFotos[res[0].mano]; S.tab = 'escanear'; pintar(); return; }
   if (files.length === 1) {
-    if (!res[0].codigo) toast(res[0].dudoso ? 'La foto no es lo bastante nítida para leer el código con seguridad. Tómala otra vez con el celular quieto y el código derecho.' : 'No encontré un código de barras en la foto. Si es un sticker escrito a mano, búscalo en Buscar.', 6500);
+    if (!res[0].codigo) toast(res[0].dudoso ? 'La foto no es lo bastante nítida para leer el código con seguridad. Tómala otra vez con el celular quieto y el código derecho.' : 'No encontré un código de barras ni un Cod ref escrito que coincida con seguridad. Búscalo en Buscar.', 6500);
     return;
   }
   const ok = res.filter(x => x.id).length, sin = res.filter(x => !x.codigo).length;
   hoja(`<h3>Resultado de ${files.length} fotos</h3><p class="hint" style="margin-bottom:10px;">${ok} en la lista · ${res.filter(x => x.codigo && !x.id).length} no están${sin ? ` · ${sin} sin código legible` : ''}</p>
     <div class="items">${res.map(x => {
+      if (x.mano != null) { const pm = S.prod.get(x.idMano); return `<button class="item" data-acc="mano-ver" data-i="${x.mano}"><span class="marcador warn"></span><span class="crece"><span class="t">${esc(pm ? pm.descripcion || pm.ref_base : x.codigo)}</span><span class="s">Escrito a mano · <span class="mono">${esc(x.codigo)}</span> · toca para confirmar</span></span></button>`; }
       const p = x.id && S.prod.get(x.id);
       const cls = p ? (N.yaFotografiada(p) ? 'warn' : 'ok') : x.archivo ? 'warn' : x.codigo ? 'no' : '';
       const t = p ? esc(p.descripcion || p.ref_base) : x.archivo ? 'Está en otra colección' : x.codigo ? 'No está en la lista' : x.dudoso ? 'Foto poco nítida: tómala otra vez' : 'Sin código legible';
@@ -500,6 +710,7 @@ async function leerFotos(files) {
 function alDetectar(codigo, origen) {
   const c = N.limpiar(codigo);
   if (c.length < 4) return;
+  S.resultadoMano = null;
   if (S.ultimo.c === c && Date.now() - S.ultimo.t < 2500) return;
   S.ultimo = { c, t: Date.now() };
   Cam.pausar(1100);
@@ -535,6 +746,7 @@ function marcar(p, estado) {
   S.prod.set(p.id, p); reconstruirIndice(); guardarCache();
   encolar('foto_marcar', { p_producto: p.id, p_estado: estado });
   toast(`${N.etiquetaEstado(estado)} ✓`);
+  aHoja([p]);
   repintarSuave();
 }
 
@@ -568,12 +780,13 @@ function tarjetaProducto(r) {
   const ya = N.yaFotografiada(p);
   const clase = ya ? 'warn' : 'ok';
   const banda = ya && p.estado === 'subido' && /^Subida en página/.test(p.estado_por || '') ? `${ico('alerta')} Subida en página · otra colección`
-    : ya ? `${ico('alerta')} Ya ${N.etiquetaEstado(p.estado).toLowerCase()}` : `${ico('check')} Sí está · fotografiar`;
+    : ya ? `${ico('alerta')} Ya tiene foto · ${esc(N.etiquetaEstado(p.estado))}` : `${ico('check')} Sí está · fotografiar`;
   let nota = '';
   if (r.tipo === 'exacto') nota = `<div class="nota-talla ok">Talla ${esc(r.talla || '—')} · está en la lista</div>`;
   else if (r.tipo === 'otra_talla') nota = `<div class="nota-talla">Talla distinta a la de la lista (código …${esc(r.sufijo)}). La referencia sí está: sirve para la foto.</div>`;
   else if (r.tipo === 'serial') nota = `<div class="nota-talla ok">Encontrada por serial</div>`;
   else if (r.tipo === 'referencia') nota = `<div class="nota-talla ok">Encontrada por referencia base</div>`;
+  if (r.origen === 'mano') nota += `<div class="nota-talla ok">Código escrito a mano · confirmado por ti</div>`;
   const tallas = (p.tallas || []).filter(Boolean);
   const tallasHtml = tallas.length ? `<div class="tallas">${tallas.map(t => `<span class="${r.talla && t === r.talla ? 'esta' : ''}">${esc(t)}</span>`).join('')}</div>` : '—';
   const bods = (p.bodegas || []).slice().sort((a, b) => (N.esTransito(a.b) - N.esTransito(b.b)) || b.n - a.n);
@@ -586,9 +799,10 @@ function tarjetaProducto(r) {
     <div class="res-cuerpo">
       <div class="res-marca">${esc(p.marca || p.hoja || '')}</div>
       <div class="res-desc">${esc(p.descripcion || 'Sin descripción')}</div>
-      ${nota}${notaColeccion(p)}
+      ${nota}${notaColeccion(p)}${notaExcel(p)}
       <dl class="datos">
         <dt>Escaneado</dt><dd class="mono">${esc(r.codigo || '—')}</dd>
+        ${p.hoja && p.hoja !== p.marca ? `<dt>Hoja</dt><dd>${esc(p.hoja)}</dd>` : ''}
         <dt>Ref. base</dt><dd class="mono">${esc(p.ref_base)}</dd>
         ${p.serial ? `<dt>Serial</dt><dd class="mono">${esc(p.serial)}</dd>` : ''}
         <dt>Tallas</dt><dd>${tallasHtml}</dd>
@@ -599,12 +813,12 @@ function tarjetaProducto(r) {
       ${(p.alertas || []).length ? `<ul class="alertas">${p.alertas.map(a => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}
       ${puedeMarcar(p) ? `<div class="pasos" role="group" aria-label="Paso de la foto">${N.ESTADOS.map(([k, l]) => {
         const o = N.ORDEN[k], act = N.ORDEN[p.estado];
-        return `<button class="paso ${o < act ? 'hecho' : ''} ${o === act ? 'actual' : ''}" data-acc="marcar" data-id="${esc(p.id)}" data-estado="${k}" aria-pressed="${o === act}"><i></i>${esc(l)}</button>`;
+        return `<button class="paso st-${k} ${o < act ? 'hecho' : ''} ${o === act ? 'actual' : ''}" data-acc="marcar" data-id="${esc(p.id)}" data-estado="${k}" aria-pressed="${o === act}" aria-label="${esc(l)}"><i></i>${esc(N.etiquetaCorta(k))}</button>`;
       }).join('')}</div>
-      ${sig ? `<div class="res-acc"><button class="btn ok full" data-acc="marcar" data-id="${esc(p.id)}" data-estado="${sig[0]}">${ico('check')} ${esc(sig[1])}</button></div>` : `<div class="nota-talla ok" style="margin:0;">Lista completa: foto subida.</div>`}`
+      ${sig ? `<div class="res-acc"><button class="btn ok full" data-acc="marcar" data-id="${esc(p.id)}" data-estado="${sig[0]}">${ico('check')} ${esc(sig[1])}</button></div>` : `<div class="nota-talla ok" style="margin:0;">Completa: subida en la página.</div>`}`
       : `<div class="pasos solo" aria-label="Paso de la foto: ${esc(N.etiquetaEstado(p.estado))}">${N.ESTADOS.map(([k, l]) => {
         const o = N.ORDEN[k], act = N.ORDEN[p.estado];
-        return `<div class="paso ${o < act ? 'hecho' : ''} ${o === act ? 'actual' : ''}"><i></i>${esc(l)}</div>`;
+        return `<div class="paso st-${k} ${o < act ? 'hecho' : ''} ${o === act ? 'actual' : ''}"><i></i>${esc(N.etiquetaCorta(k))}</div>`;
       }).join('')}</div>
       <div class="consulta">${ico('lock')} Solo consulta. ${(S.listas.find(l => l.id === p.lista_id) || {}).encargado ? `Los pasos los marca ${esc((S.listas.find(l => l.id === p.lista_id) || {}).encargado)}.` : 'Los pasos los marca el encargado de fotografía.'}</div>`}
       <div class="res-meta">${esc(nombreListaMes(p.lista_id))} · ${p.estado_por ? `último cambio: ${esc(p.estado_por)}, ${esc(haceCuanto(p.estado_en))}` : 'sin cambios todavía'}</div>
@@ -613,23 +827,70 @@ function tarjetaProducto(r) {
 }
 function siguientePaso(e) {
   return { pendiente: ['fotografiado', 'Ya la fotografié'], localizado: ['fotografiado', 'Ya la fotografié'],
-           fotografiado: ['editado', 'Marcar editada'], editado: ['subido', 'Marcar subida'] }[e] || null;
+           fotografiado: ['descargada', 'Ya la descargué'], descargada: ['drive', 'Ya está en el drive'], editado: ['drive', 'Ya está en el drive'],
+           drive: ['subido', 'Ya está subida en la página'] }[e] || null;
+}
+// Lo que dice el Excel de digital, cuando no coincide con la app
+function notaExcel(p) {
+  if (!p.estado_excel || N.normEstado(p.estado_excel) === N.normEstado(p.estado)) return '';
+  const atras = N.ORDEN[p.estado_excel] < N.ORDEN[p.estado];
+  return `<div class="nota-talla${atras ? '' : ' ok'}">En el Excel de digital dice <b>${esc(N.etiquetaEstado(p.estado_excel))}</b>${atras ? ' (la app va más adelante: se respeta lo marcado aquí)' : ''}.</div>`;
 }
 
 /* ============================================================
    PANTALLAS
    ============================================================ */
-function contar(arr) {
-  const c = { total: arr.length, pendiente: 0, localizado: 0, fotografiado: 0, editado: 0, subido: 0 };
-  arr.forEach(p => { c[p.estado] = (c[p.estado] || 0) + 1; });
-  c.fot = c.fotografiado + c.editado + c.subido; c.edi = c.editado + c.subido; c.loc = c.localizado + c.fot;
+// Conteo por paso. c.fot = ya tienen foto (tomada o más) · c.en_drive = en el drive o subidas · c.loc = localizadas o más
+function completarCuenta(c) {
+  ['pendiente', 'localizado', 'fotografiado', 'descargada', 'drive', 'subido'].forEach(k => { c[k] = Number(c[k]) || 0; });
+  c.sin_foto = c.pendiente + c.localizado;
+  c.con_foto = c.fotografiado + c.descargada + c.drive + c.subido;
+  c.en_drive = c.drive + c.subido;
+  c.fot = c.con_foto; c.loc = c.localizado + c.con_foto;
   return c;
 }
-function barraHtml(c) {
-  const pc = n => c.total ? (100 * n / c.total).toFixed(1) + '%' : '0%';
-  return `<div class="barra" role="img" aria-label="${c.fot} de ${c.total} fotografiadas, ${c.subido} subidas"><i class="b-loc" style="width:${pc(c.loc)}"></i><i class="b-fot" style="width:${pc(c.fot)}"></i><i class="b-sub" style="width:${pc(c.subido)}"></i></div>`;
+function contar(arr) { return completarCuenta(N.contarEstados(arr)); }
+function cuentaDeServidor(x) {
+  return completarCuenta({ total: x.total || 0, pendiente: x.pendiente, localizado: x.localizado, fotografiado: x.fotografiado,
+    descargada: (x.descargada || 0) + (x.editado || 0), drive: x.drive, subido: x.subido });
 }
-const pillEstado = e => `<span class="pill e-${esc(e)}">${esc(N.etiquetaEstado(e))}</span>`;
+const PASOS_BARRA = ['fotografiado', 'descargada', 'drive', 'subido'];
+function barraHtml(c) {
+  const pc = n => c.total ? (100 * n / c.total).toFixed(2) + '%' : '0%';
+  return `<div class="barra" role="img" aria-label="${c.fot} de ${c.total} con foto, ${c.en_drive} en el drive">${
+    PASOS_BARRA.map(k => c[k] ? `<i class="st-${k}" style="width:${pc(c[k])}"></i>` : '').join('')}${c.localizado ? `<i class="st-localizado" style="width:${pc(c.localizado)}"></i>` : ''}</div>`;
+}
+const pillEstado = e => { const k = N.normEstado(e); return `<span class="pill e-${esc(k)}">${esc(N.etiquetaEstado(k))}</span>`; };
+// "51 sin foto · 1 tomada · 6 en drive": solo los pasos que tienen algo
+function chipsCuenta(c, todos) {
+  const ks = ['pendiente', 'localizado', 'fotografiado', 'descargada', 'drive', 'subido'];
+  return `<span class="cuenta">${ks.filter(k => todos || c[k]).map(k => `<span class="c-${k}"><i></i><b>${c[k]}</b> ${esc(N.etiquetaCorta(k).toLowerCase())}</span>`).join('')}</span>`;
+}
+// Hojas del Excel con su conteo por paso: [{hoja, ...cuenta}] en el orden del Excel
+function hojasDe(arr) {
+  const m = new Map();
+  arr.forEach(p => { const k = p.hoja || p.marca || '—'; if (!m.has(k)) m.set(k, { n: p.hoja_n == null ? 999 : p.hoja_n, ps: [] }); m.get(k).ps.push(p); });
+  return [...m.entries()].sort((a, b) => a[1].n - b[1].n || a[0].localeCompare(b[0])).map(([hoja, x]) => Object.assign({ hoja }, contar(x.ps)));
+}
+function hojasDeServidor(x) { return (x.hojas || []).map(h => Object.assign({ hoja: h.hoja }, cuentaDeServidor(h))); }
+function hojasHtml(hs, conBoton) {
+  if (!hs.length) return `<div class="vacio">Sin datos todavía.</div>`;
+  return `<div class="hojas">${hs.map(h => `<${conBoton ? `button class="hoja-c" data-acc="ver-hoja" data-hoja="${esc(h.hoja)}"` : 'div class="hoja-c"'}>
+    <span class="fila entre"><b>${esc(h.hoja)}</b><span class="hint">${h.total} ref${h.total === 1 ? '' : 's'} · ${h.total ? Math.round(100 * h.en_drive / h.total) : 0}% en drive</span></span>
+    ${barraHtml(h)}${chipsCuenta(h)}</${conBoton ? 'button' : 'div'}>`).join('')}</div>`;
+}
+function tablaHojasHtml(hs) {
+  const tot = completarCuenta(hs.reduce((a, h) => { ['total', 'pendiente', 'localizado', 'fotografiado', 'descargada', 'drive', 'subido'].forEach(k => { a[k] = (a[k] || 0) + h[k]; }); return a; }, {}));
+  const fila = (n, h, b) => `<tr${b ? ' class="tot"' : ''}><td>${esc(n)}</td><td class="n">${h.total}</td><td class="n">${h.sin_foto || '·'}</td><td class="n">${h.fotografiado || '·'}</td><td class="n">${h.descargada || '·'}</td><td class="n">${h.drive || '·'}</td><td class="n">${h.subido || '·'}</td></tr>`;
+  return `<table class="tabla hojas-t"><thead><tr><th>Hoja</th><th class="n">Refs</th><th class="n"><i class="dot c-pendiente"></i>Sin foto</th><th class="n"><i class="dot c-fotografiado"></i>Tomada</th><th class="n"><i class="dot c-descargada"></i>Descarg.</th><th class="n"><i class="dot c-drive"></i>Drive</th><th class="n"><i class="dot c-subido"></i>Página</th></tr></thead><tbody>
+    ${hs.map(h => fila(h.hoja, h)).join('') || '<tr><td colspan="7" class="hint">Sin datos</td></tr>'}${hs.length > 1 ? fila('Total', tot, true) : ''}</tbody></table>`;
+}
+function abrirHojas() {
+  const arr = [...S.prod.values()];
+  const ls = S.listas.filter(l => l.activa);
+  hoja(`<h3>Por hoja del Excel</h3><p class="hint" style="margin-bottom:12px;">${esc(ls.length === 1 ? ls[0].nombre + ' · ' + N.nombreMes(ls[0].mes) : ls.length + ' colecciones activas')} · toca una hoja para ver sus referencias.</p>
+    ${hojasHtml(hojasDe(arr), true)}`);
+}
 
 function pintarTop() {
   const t = $('.top'); if (!t) return;
@@ -699,7 +960,7 @@ function vistaEscanear(v) {
   v.innerHTML = `<div class="cam" id="cam"><video id="video" playsinline muted autoplay></video>
       <div class="mascara"><div class="ventana"></div><div class="linea"></div></div>
       <div class="ayuda">Apunta al código de barras de la etiqueta o de la caja</div>
-      <div class="controles"><button data-acc="fotos" aria-label="Leer desde una foto" title="Leer desde una foto">${ico('imagen')}</button><button id="b-linterna" class="hidden" data-acc="linterna" aria-pressed="false" aria-label="Linterna">${ico('flash')}</button>
+      <div class="controles"><button data-acc="fotos" aria-label="Leer desde una foto" title="Leer desde una foto">${ico('imagen')}</button><button data-acc="mano" aria-label="Leer código escrito a mano" title="Código escrito a mano">${ico('mano')}</button><button id="b-linterna" class="hidden" data-acc="linterna" aria-pressed="false" aria-label="Linterna">${ico('flash')}</button>
       <button data-acc="pausar" aria-label="${S.camPausada ? 'Encender cámara' : 'Pausar cámara'}">${S.camPausada ? ico('play') : ico('pausa')}</button></div>
       <div class="aviso hidden" id="cam-aviso"></div></div>
     <div class="estado-lista" id="estado-lista"></div>
@@ -734,13 +995,20 @@ function pintarEstadoLista() {
   const e = $('#estado-lista'); if (!e) return;
   const activas = S.listas.filter(l => l.activa);
   if (!activas.length) { e.innerHTML = `<span>No hay listas activas. ${S.modo === 'admin' ? 'Agrega una en Admin.' : 'Pídele al admin que conecte una.'}</span>`; return; }
-  const c = contar([...S.prod.values()]);
-  const rol = esJefe() ? '' : puedeMarcarAlgo() ? `<span class="pill e-fotografiado">Encargado de fotos</span>` : `<span class="pill">${ico('lock')} Solo consulta</span>`;
+  const arr = [...S.prod.values()], c = contar(arr), nh = hojasDe(arr).length;
+  const avisos = [];
+  if (esJefe() && S.actor && !S.demo && S.sqlV < 6) avisos.push('Falta correr el SQL nuevo (scanner-foto.sql) en Supabase: sin eso no se toman los pasos del Excel (por eso pueden salir “Sin foto”).');
+  if (puedeMarcarAlgo()) activas.forEach(l => { const er = S.errSync[l.id]; if (er) avisos.push(`No pude leer el Excel de ${l.nombre}: ${er.msg} Toca ⟳ para reintentar.`); });
+  const rol = esJefe() ? '' : puedeMarcarAlgo() ? `<span class="pill e-rol">Encargado de fotos</span>` : `<span class="pill">${ico('lock')} Solo consulta</span>`;
   e.innerHTML = `<b style="color:var(--ink);font-weight:500;flex-basis:100%;display:flex;justify-content:space-between;gap:8px;align-items:center;">${esc(activas.length === 1 ? activas[0].nombre : activas.length + ' listas activas')}${rol}</b>
-    <span>${c.total} refs · ${c.fot} fotografiadas · ${c.subido} subidas</span><div class="crece" style="flex-basis:100%;">${barraHtml(c)}</div>`;
+    <span>${c.total} refs · <b>${c.sin_foto}</b> sin foto · <b>${c.en_drive}</b> en el drive</span>
+    ${nh ? `<button class="chip peq" data-acc="hojas">Por hoja · ${nh}</button>` : ''}
+    <div class="crece" style="flex-basis:100%;">${barraHtml(c)}</div>
+    ${avisos.map(a => `<div class="aviso-lista">${ico('alerta')}<span>${esc(a)}</span></div>`).join('')}`;
 }
 function pintarResultado() {
   const d = $('#resultado'); if (!d) return;
+  if (S.resultadoMano) { d.innerHTML = tarjetaManuscrito(S.resultadoMano); return; }
   if (!S.resultado) { d.innerHTML = ''; return; }
   if (S.resultado.p) S.resultado.p = S.prod.get(S.resultado.p.id) || S.resultado.p;
   d.innerHTML = tarjetaProducto(S.resultado);
@@ -791,7 +1059,7 @@ function abrirSesion() {
   hoja(`<h3>Sesión de fotos · ${ps.length}</h3><p class="hint" style="margin-bottom:10px;">Quita las que no alcanzaste y marca el resto con un toque.</p>
     ${ps.map(p => `<label class="opcion-chk"><input type="checkbox" checked data-sid="${esc(p.id)}"><span class="crece"><b style="font-weight:500;">${esc(p.descripcion || p.ref_base)}</b><br><span class="hint">${esc(p.ref_base)} · ${esc(N.etiquetaEstado(p.estado))}</span></span></label>`).join('')}
     <div class="sec-t">Marcar las seleccionadas como</div>
-    <div class="fila"><button class="btn ok" data-acc="lote" data-estado="fotografiado">Fotografiadas</button><button class="btn sec" data-acc="lote" data-estado="editado">Editadas</button><button class="btn sec" data-acc="lote" data-estado="subido">Subidas</button></div>`);
+    <div class="fila"><button class="btn ok" data-acc="lote" data-estado="fotografiado">Foto tomada</button><button class="btn sec" data-acc="lote" data-estado="descargada">Descargadas</button><button class="btn sec" data-acc="lote" data-estado="drive">En el drive</button><button class="btn sec" data-acc="lote" data-estado="subido">En página</button></div>`);
 }
 function marcarLote(ids, estado) {
   ids = ids.filter(id => puedeMarcar(S.prod.get(id)));
@@ -799,6 +1067,7 @@ function marcarLote(ids, estado) {
   ids.forEach(id => { const p = S.prod.get(id); if (p) { p.estado = estado; p.estado_por = S.actor && S.actor.nombre; p.estado_en = ahoraIso(); } });
   reconstruirIndice(); guardarCache();
   encolar('foto_marcar_lote', { p_productos: ids, p_estado: estado });
+  aHoja(ids.map(id => S.prod.get(id)));
   S.sesion = S.sesion.filter(id => !ids.includes(id)); guardarSesion();
   toast(`${ids.length} marcada${ids.length === 1 ? '' : 's'} como ${N.etiquetaEstado(estado)}`);
   repintarSuave();
@@ -810,7 +1079,7 @@ function vistaBuscar(v) {
     <p class="hint" style="margin-bottom:10px;">Para stickers escritos a mano o etiquetas dañadas: escribe el código, la referencia o el serial. Con 5 o 6 dígitos ya aparece.</p>
     <form class="buscador" id="f-buscar" autocomplete="off"><input class="inp" id="q" value="${esc(S.buscar)}" inputmode="${S.tecladoTexto ? 'text' : 'numeric'}" autocapitalize="characters" spellcheck="false" placeholder="Código, referencia o serial" aria-label="Código, referencia o serial">
       <div class="lado"><button type="button" data-acc="teclado">${S.tecladoTexto ? '123' : 'ABC'}</button><button type="submit" aria-label="Buscar">${ico('buscar')}</button></div></form>
-    <button class="btn sec full" style="margin-top:10px;" data-acc="fotos">${ico('imagen')} Leer el código desde una foto</button>
+    <button class="btn sec full" style="margin-top:10px;" data-acc="fotos">${ico('imagen')} Leer desde una foto (código de barras o escrito a mano)</button>
     <div id="sug" style="margin-top:12px;"></div>`;
   const q = $('#q');
   q.addEventListener('input', () => { S.buscar = q.value; pintarSugerencias(); });
@@ -857,17 +1126,19 @@ function sedesDisponibles() {
 }
 function vistaPendientes(v) {
   if (S.filtros.sede === '' && S.sede && !S._filtroTocado) S.filtros.sede = S.sede;
-  const marcas = [...new Set([...S.prod.values()].map(p => p.marca || p.hoja))].sort();
+  const hojas = hojasDe([...S.prod.values()]);
   const sedes = sedesDisponibles();
   const listas = S.listas.filter(l => l.activa);
-  v.innerHTML = `<h2 class="titulo">Pendientes por tienda</h2>
+  if (S.filtros.hoja && !hojas.some(h => h.hoja === S.filtros.hoja)) S.filtros.hoja = '';
+  v.innerHTML = `<h2 class="titulo">Pendientes</h2>
+    <details class="resumen-hojas" ${S.filtros.hoja ? '' : 'open'}><summary>Por hoja del Excel <span class="hint">· ${hojas.length}</span></summary>${hojasHtml(hojas, true)}</details>
     <div class="filtros">
       <select id="fl-sede" aria-label="Tienda o bodega"><option value="*">Todas las tiendas</option>${sedes.map(s => `<option value="${esc(s)}" ${S.filtros.sede === s ? 'selected' : ''}>${esc(N.nombreSede(s))}${N.esTransito(s) ? ' (tránsito)' : ''}</option>`).join('')}</select>
-      <select id="fl-estado" aria-label="Estado"><option value="falta" ${S.filtros.estado === 'falta' ? 'selected' : ''}>Por fotografiar</option>${N.ESTADOS.map(([k, l]) => `<option value="${k}" ${S.filtros.estado === k ? 'selected' : ''}>${l}</option>`).join('')}<option value="*" ${S.filtros.estado === '*' ? 'selected' : ''}>Todos los estados</option></select>
-      <select id="fl-marca" aria-label="Marca"><option value="">Todas las marcas</option>${marcas.map(m => `<option ${S.filtros.marca === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
+      <select id="fl-estado" aria-label="Paso"><option value="falta" ${S.filtros.estado === 'falta' ? 'selected' : ''}>Sin foto (por fotografiar)</option><option value="nodrive" ${S.filtros.estado === 'nodrive' ? 'selected' : ''}>Falta llevar al drive</option>${N.ESTADOS.map(([k, l]) => `<option value="${k}" ${S.filtros.estado === k ? 'selected' : ''}>Solo: ${l}</option>`).join('')}<option value="*" ${S.filtros.estado === '*' ? 'selected' : ''}>Todos los pasos</option></select>
+      <select id="fl-hoja" aria-label="Hoja del Excel" class="${S.filtros.hoja ? 'on' : ''}"><option value="">Todas las hojas</option>${hojas.map(h => `<option ${S.filtros.hoja === h.hoja ? 'selected' : ''}>${esc(h.hoja)}</option>`).join('')}</select>
       ${listas.length > 1 ? `<select id="fl-lista" aria-label="Lista"><option value="">Todas las listas</option>${listas.map(l => `<option value="${esc(l.id)}" ${S.filtros.lista === l.id ? 'selected' : ''}>${esc(l.nombre)}</option>`).join('')}</select>` : ''}
     </div><div id="pend"></div>`;
-  ['sede', 'estado', 'marca', 'lista'].forEach(k => { const s = $('#fl-' + k); if (s) s.addEventListener('change', () => { S.filtros[k] = s.value === '*' && k === 'sede' ? '*' : s.value; if (k === 'sede') S._filtroTocado = true; pintarPendientes(); }); });
+  ['sede', 'estado', 'hoja', 'lista'].forEach(k => { const s = $('#fl-' + k); if (s) s.addEventListener('change', () => { S.filtros[k] = s.value === '*' && k === 'sede' ? '*' : s.value; if (k === 'sede') S._filtroTocado = true; if (k === 'hoja') s.classList.toggle('on', !!s.value); pintarPendientes(); }); });
   pintarPendientes();
 }
 function pintarPendientes() {
@@ -875,15 +1146,17 @@ function pintarPendientes() {
   const f = S.filtros;
   let arr = [...S.prod.values()];
   if (f.sede && f.sede !== '*') arr = arr.filter(p => (p.bodegas || []).some(b => b.b === f.sede));
-  if (f.estado === 'falta') arr = arr.filter(p => !N.yaFotografiada(p)); else if (f.estado && f.estado !== '*') arr = arr.filter(p => p.estado === f.estado);
-  if (f.marca) arr = arr.filter(p => (p.marca || p.hoja) === f.marca);
+  if (f.estado === 'falta') arr = arr.filter(p => !N.yaFotografiada(p));
+  else if (f.estado === 'nodrive') arr = arr.filter(p => !N.enDrive(p));
+  else if (f.estado && f.estado !== '*') arr = arr.filter(p => N.normEstado(p.estado) === f.estado);
+  if (f.hoja) arr = arr.filter(p => (p.hoja || p.marca || '—') === f.hoja);
   if (f.lista) arr = arr.filter(p => p.lista_id === f.lista);
-  if (!arr.length) { d.innerHTML = `<div class="vacio">${f.estado === 'falta' ? 'No queda nada por fotografiar aquí.' : 'No hay referencias con ese filtro.'}</div>`; return; }
+  if (!arr.length) { d.innerHTML = `<div class="vacio">${f.estado === 'falta' ? 'No queda nada sin foto aquí.' : f.estado === 'nodrive' ? 'Todo lo de aquí ya está en el drive.' : 'No hay referencias con ese filtro.'}</div>`; return; }
   const grupos = new Map();
-  arr.sort((a, b) => String(a.descripcion).localeCompare(String(b.descripcion))).forEach(p => { const k = p.marca || p.hoja || '—'; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(p); });
+  arr.sort((a, b) => (a.hoja_n ?? 999) - (b.hoja_n ?? 999) || String(a.descripcion).localeCompare(String(b.descripcion))).forEach(p => { const k = p.hoja || p.marca || '—'; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(p); });
   const sede = f.sede && f.sede !== '*' ? f.sede : '';
   d.innerHTML = `<p class="hint">${arr.length} referencia${arr.length === 1 ? '' : 's'}${sede ? ' con unidades en ' + esc(N.nombreSede(sede)) : ''}.</p>` +
-    [...grupos.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([m, ps]) => `<div class="grupo-t"><span>${esc(m)}</span><span>${ps.length}</span></div><div class="items">${ps.map(p => {
+    [...grupos.entries()].map(([m, ps]) => `<div class="grupo-t"><span>${esc(m)}</span><span>${ps.length}</span></div><div class="items">${ps.map(p => {
       const u = sede ? ((p.bodegas || []).find(b => b.b === sede) || {}).n : null;
       return itemHtml(p, u ? ` · <b>${u} und. aquí</b>` : '');
     }).join('')}</div>`).join('');
@@ -898,9 +1171,7 @@ function nombreListaMes(id) { const l = S.listas.find(x => x.id === id); return 
 function cuentasLista(l) {          // activa: con los datos del teléfono · archivada: lo que dice el servidor
   if (l.activa) { const arr = [...S.prod.values()].filter(p => p.lista_id === l.id); if (arr.length || !S.progreso[l.id]) return contar(arr); }
   const x = S.progreso[l.id]; if (!x) return contar([]);
-  const c = { total: x.total || 0, pendiente: x.pendiente || 0, localizado: x.localizado || 0, fotografiado: x.fotografiado || 0, editado: x.editado || 0, subido: x.subido || 0 };
-  c.fot = c.fotografiado + c.editado + c.subido; c.edi = c.editado + c.subido; c.loc = c.localizado + c.fot;
-  return c;
+  return cuentaDeServidor(x);
 }
 async function traerProgreso() {
   if (!S.listas.length) return;
@@ -929,9 +1200,9 @@ function pintarCalendario() {
   d.innerHTML = MES_CORTO.map((m, i) => {
     const clave = `${S.calAnio}-${String(i + 1).padStart(2, '0')}`;
     const ls = listasDelMes(clave);
-    const c = ls.reduce((a, l) => { const k = cuentasLista(l); a.total += k.total; a.fot += k.fot; a.subido += k.subido; a.loc += k.loc; return a; }, { total: 0, fot: 0, subido: 0, loc: 0 });
+    const c = completarCuenta(ls.reduce((a, l) => { const k = cuentasLista(l); ['total', 'pendiente', 'localizado', 'fotografiado', 'descargada', 'drive', 'subido'].forEach(x => { a[x] += k[x]; }); return a; }, { total: 0, pendiente: 0, localizado: 0, fotografiado: 0, descargada: 0, drive: 0, subido: 0 }));
     return `<button class="cal-mes ${clave === S.calMes ? 'sel' : ''} ${clave === hoy ? 'hoy' : ''} ${ls.length ? '' : 'vacio-mes'}" data-acc="cal-mes" data-mes="${clave}" aria-pressed="${clave === S.calMes}">
-      <span class="cal-n">${m}</span>${ls.length ? `<span class="cal-d">${ls.length} colec. · ${c.total} refs</span>${barraHtml(c)}<span class="cal-p">${c.total ? Math.round(100 * c.subido / c.total) : 0}% subidas</span>` : `<span class="cal-d">${clave === hoy ? 'Mes actual' : 'Sin Excel'}</span>`}</button>`;
+      <span class="cal-n">${m}</span>${ls.length ? `<span class="cal-d">${ls.length} colec. · ${c.total} refs</span>${barraHtml(c)}<span class="cal-p">${c.total ? Math.round(100 * c.en_drive / c.total) : 0}% en drive</span>` : `<span class="cal-d">${clave === hoy ? 'Mes actual' : 'Sin Excel'}</span>`}</button>`;
   }).join('');
 }
 function pintarMes() {
@@ -943,9 +1214,9 @@ function pintarMes() {
   d.innerHTML = `<div class="sec-t">${esc(titulo)}</div>` + (ls.length ? `<div class="items">${ls.map(l => {
     const c = cuentasLista(l), x = S.progreso[l.id] || {};
     return `<div class="panel col ${l.id === S.reporteLista ? 'sel' : ''}">
-      <div class="fila entre"><b style="font-weight:500;">${esc(l.nombre)}</b>${l.activa ? '<span class="pill e-fotografiado">Activa</span>' : '<span class="pill">Archivada</span>'}</div>
-      <p class="hint" style="margin:4px 0 8px;">Encargado: <b>${esc(l.encargado || 'sin asignar')}</b> · ${c.total} refs · ${c.fot} fotografiadas · ${c.subido} subidas${x.arrastrados ? ` · ${x.arrastrados} vienen de otro mes` : ''}${x.otra ? ` · ${x.otra} también en otra colección` : ''}</p>
-      ${barraHtml(c)}
+      <div class="fila entre"><b style="font-weight:500;">${esc(l.nombre)}</b>${l.activa ? '<span class="pill e-rol">Activa</span>' : '<span class="pill">Archivada</span>'}</div>
+      <p class="hint" style="margin:4px 0 8px;">Encargado: <b>${esc(l.encargado || 'sin asignar')}</b> · ${c.total} refs${x.arrastrados ? ` · ${x.arrastrados} vienen de otro mes` : ''}${x.otra ? ` · ${x.otra} también en otra colección` : ''}</p>
+      ${barraHtml(c)}${chipsCuenta(c)}
       <div class="fila" style="margin-top:10px;"><button class="btn sec peq" data-acc="ver-col" data-id="${esc(l.id)}">Ver reporte</button>
         <button class="btn sec peq" data-acc="cambios" data-id="${esc(l.id)}">Qué cambió en el Excel</button></div></div>`;
   }).join('')}</div>` : `<div class="vacio">No hay Excel en ${esc(titulo)}.${esJefe() ? ' Agrégalo aquí abajo.' : ''}</div>`);
@@ -970,12 +1241,7 @@ async function pintarReporte(traer) {
   const local = l.activa && [...S.prod.values()].some(p => p.lista_id === l.id);
   const arr = local ? [...S.prod.values()].filter(p => p.lista_id === l.id) : [];
   const c = cuentasLista(l), x = S.progreso[l.id] || {};
-  let marcas = [];
-  if (local) {
-    const m = new Map(); arr.forEach(p => { const k = p.marca || p.hoja || '—'; if (!m.has(k)) m.set(k, []); m.get(k).push(p); });
-    marcas = [...m.entries()].map(([marca, ps]) => { const k = contar(ps); return { marca, total: k.total, fot: k.fot, edi: k.edi, sub: k.subido }; });
-  } else marcas = (x.marcas || []).map(m => ({ marca: m.marca, total: m.total, fot: m.fotografiadas, edi: m.editadas, sub: m.subidas }));
-  marcas.sort((a, b) => String(a.marca).localeCompare(String(b.marca)));
+  const hojas = local ? hojasDe(arr) : hojasDeServidor(x);
   const alertas = arr.filter(p => (p.alertas || []).length).length;
   const pct = n => c.total ? Math.round(100 * n / c.total) + '%' : '0%';
   d.innerHTML = `<div class="sec-t">Reporte · ${esc(l.nombre)} · ${esc(N.nombreMes(l.mes))}</div>
@@ -983,18 +1249,17 @@ async function pintarReporte(traer) {
       <div class="fila entre"><span class="hint">Excel leído ${esc(haceCuanto(l.sincronizada_en))}</span>
         <span class="fila">${puedeMarcarLista(l.id) && l.archivo_id && l.activa ? `<button class="btn sec peq" data-acc="sync-drive">${ico('sync')} Leer del Drive</button>` : ''}
         ${local ? `<button class="btn peq" data-acc="exportar">${ico('descargar')} Excel</button>` : ''}</span></div>
-      <div class="kpis">
-        <div class="kpi"><b>${c.loc}</b><span>Localizadas · ${pct(c.loc)}</span></div>
-        <div class="kpi"><b>${c.fot}</b><span>Fotografiadas · ${pct(c.fot)}</span></div>
-        <div class="kpi"><b>${c.edi}</b><span>Editadas · ${pct(c.edi)}</span></div>
-        <div class="kpi"><b>${c.subido}</b><span>Subidas · ${pct(c.subido)}</span></div>
+      <div class="kpis k5">
+        <div class="kpi c-pendiente"><b>${c.sin_foto}</b><span><i></i>Sin foto · ${pct(c.sin_foto)}</span></div>
+        <div class="kpi c-fotografiado"><b>${c.fotografiado}</b><span><i></i>Foto tomada</span></div>
+        <div class="kpi c-descargada"><b>${c.descargada}</b><span><i></i>Descargada</span></div>
+        <div class="kpi c-drive"><b>${c.drive}</b><span><i></i>En el drive</span></div>
+        <div class="kpi c-subido"><b>${c.subido}</b><span><i></i>En página</span></div>
       </div>${barraHtml(c)}
-      <p class="hint" style="margin-top:8px;">${c.total} referencias · faltan ${c.total - c.fot} por fotografiar${alertas ? ` · <span class="pill alerta">${alertas} con datos por revisar</span>` : ''}${!l.activa ? ' · colección archivada' : ''}</p>
+      <p class="hint" style="margin-top:8px;">${c.total} referencias · <b>${c.fot}</b> con foto (${pct(c.fot)}) · <b>${c.en_drive}</b> ya en el drive (${pct(c.en_drive)})${c.localizado ? ` · ${c.localizado} localizadas sin foto` : ''}${alertas ? ` · <span class="pill alerta">${alertas} con datos por revisar</span>` : ''}${!l.activa ? ' · colección archivada' : ''}</p>
     </div>
-    <div class="sec-t">Por marca</div>
-    <div class="panel" style="padding:6px 12px;overflow-x:auto;"><table class="tabla"><thead><tr><th>Marca</th><th class="n">Refs</th><th class="n">Fotog.</th><th class="n">Editadas</th><th class="n">Subidas</th></tr></thead><tbody>
-      ${marcas.map(m => `<tr><td>${esc(m.marca)}</td><td class="n">${m.total}</td><td class="n">${m.fot}</td><td class="n">${m.edi}</td><td class="n">${m.sub}</td></tr>`).join('') || '<tr><td colspan="5" class="hint">Sin datos</td></tr>'}
-    </tbody></table></div>
+    <div class="sec-t">Por hoja del Excel</div>
+    <div class="panel" style="padding:6px 12px;overflow-x:auto;">${tablaHojasHtml(hojas)}</div>
     <div class="sec-t">Quién ha fotografiado</div><div class="panel" id="rp-personas"><p class="hint">Cargando…</p></div>
     <div class="sec-t">Tiempos y ritmo</div><div class="panel" id="rp-metricas"><p class="hint">Cargando…</p></div>
     <div class="sec-t">Historial</div><div class="panel" id="rp-hist" style="padding:4px 14px;"><p class="hint" style="padding:10px 0;">Cargando…</p></div>`;
@@ -1018,7 +1283,7 @@ async function pintarReporte(traer) {
   if (dh) {
     const ev = hi && hi.ok ? hi.eventos : [];
     dh.innerHTML = ev.length ? ev.map(e => {
-      const que = e.accion === 'estado' ? `${esc(e.actor_nombre)} marcó <b>${esc(N.etiquetaEstado(e.estado_nuevo))}</b>` : e.accion === 'escaneo' ? `${esc(e.actor_nombre)} escaneó` : `${esc(e.actor_nombre)} escaneó un código que no está`;
+      const que = e.accion === 'estado' ? `${esc(e.actor_nombre)} ${e.actor_tipo === 'excel' ? 'dice' : 'marcó'} <b>${esc(N.etiquetaEstado(e.estado_nuevo))}</b>` : e.accion === 'escaneo' ? `${esc(e.actor_nombre)} escaneó` : `${esc(e.actor_nombre)} escaneó un código que no está`;
       return `<div class="evento"><span class="cuando">${esc(haceCuanto(e.creado_en))}</span><span class="crece">${que} · ${esc(e.descripcion || e.codigo || e.ref_base || '')}${e.sede ? ` <span class="hint">· ${esc(N.nombreSede(e.sede))}</span>` : ''}</span></div>`;
     }).join('') : `<p class="hint" style="padding:10px 0;">Sin movimientos todavía.</p>`;
   }
@@ -1038,14 +1303,14 @@ function metricasHtml(m) {
   const max = Math.max(1, ...dias.map(d => porDia.get(d) || 0));
   const totalMes = dias.reduce((s, d) => s + (porDia.get(d) || 0), 0);
   return `<div class="kpis k3">
-      <div class="kpi"><b>${dur(t.loc_fot)}</b><span>De localizada a fotografiada</span></div>
-      <div class="kpi"><b>${dur(t.fot_sub)}</b><span>De fotografiada a subida</span></div>
-      <div class="kpi"><b>${dur(t.loc_sub)}</b><span>Del escaneo a la página</span></div></div>
-    <p class="hint">Medianas con ${t.n_fot || 0} fotografiadas y ${t.n_sub || 0} subidas.</p>
+      <div class="kpi"><b>${dur(t.loc_fot)}</b><span>Del escaneo a la foto</span></div>
+      <div class="kpi"><b>${dur(t.fot_sub)}</b><span>De la foto al drive</span></div>
+      <div class="kpi"><b>${dur(t.loc_sub)}</b><span>Del escaneo al drive</span></div></div>
+    <p class="hint">Medianas con ${t.n_fot || 0} fotos tomadas y ${t.n_sub || 0} en el drive.</p>
     ${personas.length ? `<div style="overflow-x:auto;margin-top:10px;"><table class="tabla"><thead><tr><th>Fotos por semana</th>${semanas.map(s => `<th class="n">${esc(fSem(s))}</th>`).join('')}</tr></thead><tbody>
       ${personas.map(n => `<tr><td>${esc(n)}</td>${semanas.map(s => `<td class="n">${val(n, s) || '·'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}
-    <div class="fila entre" style="margin-top:12px;"><span class="hint">Fotografiadas por día · últimos 30 días</span><span class="hint">${totalMes} en total</span></div>
-    <div class="ritmo" role="img" aria-label="${totalMes} referencias fotografiadas en los últimos 30 días">${dias.map(d => `<i style="height:${Math.round(100 * (porDia.get(d) || 0) / max)}%" title="${esc(d)}: ${porDia.get(d) || 0}"></i>`).join('')}</div>`;
+    <div class="fila entre" style="margin-top:12px;"><span class="hint">Fotos tomadas por día · últimos 30 días</span><span class="hint">${totalMes} en total</span></div>
+    <div class="ritmo" role="img" aria-label="${totalMes} fotos tomadas en los últimos 30 días">${dias.map(d => `<i style="height:${Math.round(100 * (porDia.get(d) || 0) / max)}%" title="${esc(d)}: ${porDia.get(d) || 0}"></i>`).join('')}</div>`;
 }
 
 /* ---------- Qué cambió en el Excel ---------- */
@@ -1062,22 +1327,56 @@ async function abrirCambios(id) {
       ${(v.quitados || []).length ? `<details><summary>Ya no están (${v.quitados.length})</summary>${listaRefs(v.quitados)}</details>` : ''}</span></div>`).join('')
     : '<p class="hint">Todavía no hay cambios registrados.</p>';
 }
-function mostrarCambiosSync(lista, s) {
+// Revisión: lo que dice la columna de proceso del Excel vs lo que tiene la app, por hoja
+function comparacionExcel(lista, r, hsApp) {
+  const hx = ((r && r.hojas) || []).filter(h => h.usada);
+  if (!hx.length) return '';
+  const app = new Map((hsApp || []).map(h => [h.hoja, h]));
+  let atrasadas = [];
+  const filas = hx.map(h => {
+    const e = h.estados || {}, a = app.get(h.nombre) || {};
+    const exConFoto = (e.con_foto || 0), apConFoto = a.con_foto || 0, exDrive = (e.en_drive || 0), apDrive = a.en_drive || 0;
+    const ok = apConFoto >= exConFoto && apDrive >= exDrive;
+    if (!ok) atrasadas.push(h.nombre);
+    return `<tr><td>${esc(h.nombre)}</td><td class="n">${h.columna_estado ? esc(h.columna_estado) : '—'}</td><td class="n">${exConFoto}</td><td class="n">${exDrive}</td><td class="n">${apConFoto}</td><td class="n">${apDrive}</td><td class="n">${ok ? '✓' : '<b style="color:var(--danger)">✗</b>'}</td></tr>`;
+  }).join('');
+  return `<details class="revision" ${atrasadas.length ? 'open' : ''}><summary>Revisión: lo que dice el Excel vs la app</summary>
+    <div style="overflow-x:auto;"><table class="tabla"><thead><tr><th>Hoja</th><th class="n">Columna</th><th class="n">Excel con foto</th><th class="n">Excel en drive</th><th class="n">App con foto</th><th class="n">App en drive</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
+    ${atrasadas.length ? `<p class="hint" style="color:var(--danger);margin-top:6px;">La app no tomó lo del Excel en: ${esc(atrasadas.join(', '))}. ${S.sqlV < 6 && !S.demo ? 'Falta correr el SQL nuevo (scanner-foto.sql) en Supabase.' : 'Toca “Leer del Drive” otra vez.'}</p>` : '<p class="hint" style="margin-top:6px;">Todo lo que marca el Excel está en la app (la app puede ir más adelante).</p>'}</details>`;
+}
+// ¿Lo que se marca en la app se ve en la hoja de cálculo?
+function avisoEscritura(l) {
+  if (!l || l.origen !== 'drive' || !puedeMarcarLista(l.id)) return '';
+  const t = S.tipoArchivo[l.archivo_id];
+  if (t === 'xlsx') return '';            // el Excel de digital se queda como está: el avance se ve en la hoja de avance y en Equipo Creativo
+  if (t === 'sheet' && S.puenteVersion !== undefined && S.puenteVersion < 5) return `<div class="nota-talla" style="margin-top:10px;">Es Hoja de Google, pero el puente es una versión vieja: actualiza su código (versión 5) para que lo que marquen aquí se escriba en la hoja.</div>`;
+  if (t === 'sheet') return `<div class="nota-talla ok" style="margin-top:10px;">Hoja de Google ✓ · lo que se marque aquí se escribe solo en la columna de proceso de cada hoja (solo avanza).</div>`;
+  return '';
+}
+function mostrarCambiosSync(lista, s, r) {
   const nv = s.lista_nuevos || [], qt = s.lista_quitados || [];
-  if (!nv.length && !qt.length) return;
-  hoja(`<h3>El Excel cambió · ${esc(lista.nombre)}</h3><p class="hint" style="margin-bottom:10px;">${esc(N.nombreMes(lista.mes))} · el avance de lo que ya estaba no se pierde.</p>
+  const hs = Array.isArray(s.hojas) && s.hojas.length ? s.hojas.map(h => Object.assign({ hoja: h.hoja }, cuentaDeServidor(h))) : hojasDe([...S.prod.values()].filter(p => p.lista_id === lista.id));
+  const sinCol = ((r && r.hojas) || []).filter(h => h.usada && !h.columna_estado).map(h => h.nombre);
+  const ignoradas = ((r && r.hojas) || []).filter(h => !h.usada).map(h => h.nombre);
+  hoja(`<h3>${s.primera ? 'Excel conectado' : 'Excel leído'} · ${esc(lista.nombre)}</h3><p class="hint" style="margin-bottom:10px;">${esc(N.nombreMes(lista.mes))} · ${s.total} referencias en ${hs.length} hoja${hs.length === 1 ? '' : 's'}${s.excel ? ` · <b>${s.excel}</b> avanzaron con lo que dice el Excel` : ''}. ${s.primera ? '' : 'El avance de lo que ya estaba no se pierde.'}</p>
+    ${hojasHtml(hs, false)}
+    ${sinCol.length ? `<p class="hint" style="margin-top:8px;">Sin columna de proceso (todas quedan “Sin foto” hasta que alguien las marque): ${esc(sinCol.join(', '))}.</p>` : ''}
+    ${ignoradas.length ? `<p class="hint" style="margin-top:4px;">No son listas de productos (no se leen): ${esc(ignoradas.join(', '))}.</p>` : ''}
+    ${comparacionExcel(lista, r, hs)}
+    ${avisoEscritura(lista)}
     ${nv.length ? `<div class="sec-t">Nuevas (${nv.length})</div>${listaRefs(nv)}` : ''}${qt.length ? `<div class="sec-t">Ya no están (${qt.length})</div>${listaRefs(qt)}` : ''}
     <button class="btn full" style="margin-top:14px;" data-acc="cerrar">Listo</button>`);
 }
 
 /* ---------- Pendientes de meses anteriores: se pregunta cada vez ---------- */
-function preguntarArrastre(nueva) {
+function preguntarArrastre(nueva, intento) {
+  if ($('.ov')) { if ((intento || 0) < 1500) setTimeout(() => preguntarArrastre(nueva, (intento || 0) + 1), 400); return; }
   const viejas = S.listas.filter(l => l.activa && l.id !== nueva.id && mesClave(l.mes) < mesClave(nueva.mes))
-    .map(l => ({ l, n: [...S.prod.values()].filter(p => p.lista_id === l.id && p.estado !== 'subido').length })).filter(x => x.n > 0);
+    .map(l => ({ l, n: [...S.prod.values()].filter(p => p.lista_id === l.id && !N.enDrive(p)).length })).filter(x => x.n > 0);
   if (!viejas.length) return;
   hoja(`<h3>Pendientes de meses anteriores</h3>
-    <p class="hint" style="margin-bottom:10px;">Quedaron referencias sin subir. ¿Las pasas a ${esc(N.nombreMes(nueva.mes))}? Conservan su paso (si ya estaban fotografiadas, siguen así).</p>
-    ${viejas.map(x => `<label class="opcion-chk"><input type="checkbox" checked data-origen="${esc(x.l.id)}"><span>${esc(x.l.nombre)} · ${esc(N.nombreMes(x.l.mes))} — <b>${x.n}</b> sin subir</span></label>`).join('')}
+    <p class="hint" style="margin-bottom:10px;">Quedaron referencias que no llegaron al drive. ¿Las pasas a ${esc(N.nombreMes(nueva.mes))}? Conservan su paso (si ya tenían foto, siguen así).</p>
+    ${viejas.map(x => `<label class="opcion-chk"><input type="checkbox" checked data-origen="${esc(x.l.id)}"><span>${esc(x.l.nombre)} · ${esc(N.nombreMes(x.l.mes))} — <b>${x.n}</b> sin llegar al drive</span></label>`).join('')}
     <label class="opcion-chk"><input type="checkbox" id="arch" checked><span>Archivar los meses que queden sin pendientes</span></label>
     <div class="fila" style="margin-top:12px;"><button class="btn" data-acc="pasar-ok" data-destino="${esc(nueva.id)}">Pasar a ${esc(N.nombreMes(nueva.mes))}</button><button class="btn sec" data-acc="cerrar">Dejarlos en su mes</button></div>`);
 }
@@ -1100,18 +1399,21 @@ async function pasarPendientes(el) {
 function exportar() {
   const l = S.listas.find(x => x.id === S.reporteLista) || S.listas.find(x => x.activa);
   if (!l) return toast('No hay colección para exportar');
-  const arr = [...S.prod.values()].filter(p => p.lista_id === l.id).sort((a, b) => String(a.hoja).localeCompare(String(b.hoja)) || (a.fila || 0) - (b.fila || 0));
+  const arr = [...S.prod.values()].filter(p => p.lista_id === l.id).sort((a, b) => (a.hoja_n ?? 999) - (b.hoja_n ?? 999) || String(a.hoja).localeCompare(String(b.hoja)) || (a.fila || 0) - (b.fila || 0));
   if (!arr.length) return toast('Activa la colección para exportarla');
-  const filas = [['Hoja', 'Marca', 'Ref base', 'Serial', 'Códigos', 'Tallas', 'Descripción', 'Bodegas', 'Cantidad', 'Estado foto', 'Fotografiada', 'Subida', 'Último cambio por', 'Fecha último cambio', 'Otra colección', 'Viene de', 'Foto en Drive', 'Revisar datos']];
+  // Mismas palabras de la lista desplegable del Excel de digital
+  const EXCEL = { pendiente: 'no tiene foto', localizado: 'no tiene foto', fotografiado: 'Foto tomada', descargada: 'Foto descargada', drive: 'En el drive', subido: 'Subido en la pagina' };
+  const filas = [['Hoja', 'Marca', 'Ref base', 'Serial', 'Códigos', 'Tallas', 'Descripción', 'Bodegas', 'Cantidad', 'Proceso (como en el Excel)', 'Paso en la app', 'Decía el Excel', 'Último cambio por', 'Fecha último cambio', 'Otra colección', 'Viene de', 'Foto en Drive', 'Revisar datos']];
   arr.forEach(p => filas.push([p.hoja || '', p.marca || '', p.ref_base, p.serial || '', (p.codigos || []).join(', '), (p.tallas || []).join(', '), p.descripcion || '',
-    (p.bodegas || []).map(b => `${b.b} (${b.n})`).join(', '), p.cantidad == null ? '' : Number(p.cantidad), N.etiquetaEstado(p.estado),
-    N.yaFotografiada(p) ? 'SÍ' : 'NO', p.estado === 'subido' ? 'SÍ' : 'NO', p.estado_por || '', p.estado_en ? horaCO(p.estado_en) : '',
+    (p.bodegas || []).map(b => `${b.b} (${b.n})`).join(', '), p.cantidad == null ? '' : Number(p.cantidad), EXCEL[N.normEstado(p.estado)] || '', N.etiquetaEstado(p.estado),
+    p.estado_excel ? EXCEL[N.normEstado(p.estado_excel)] : '', p.estado_por || '', p.estado_en ? horaCO(p.estado_en) : '',
     p.otra ? `${p.otra.nombre} · ${N.nombreMes(p.otra.mes)} (${N.etiquetaEstado(p.otra.estado)})` : '', p.arrastrado_de ? nombreListaMes(p.arrastrado_de) : '',
     p.drive_archivo || '', (p.alertas || []).join(' | ')]));
-  const marcas = new Map(); arr.forEach(p => { const k = p.marca || p.hoja || '—'; if (!marcas.has(k)) marcas.set(k, []); marcas.get(k).push(p); });
-  const res = [['Marca', 'Referencias', 'Localizadas', 'Fotografiadas', 'Editadas', 'Subidas', '% subidas']];
-  [...marcas.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([m, ps]) => { const c = contar(ps); res.push([m, c.total, c.loc, c.fot, c.edi, c.subido, c.total ? Math.round(100 * c.subido / c.total) : 0]); });
-  const t = contar(arr); res.push(['TOTAL', t.total, t.loc, t.fot, t.edi, t.subido, t.total ? Math.round(100 * t.subido / t.total) : 0]);
+  const res = [['Hoja', 'Referencias', 'Sin foto', 'Foto tomada', 'Foto descargada', 'En el drive', 'Subido en la pagina', '% con foto', '% en el drive']];
+  const pc = (n, t) => t ? Math.round(100 * n / t) : 0;
+  const filaRes = (n, c) => [n, c.total, c.sin_foto, c.fotografiado, c.descargada, c.drive, c.subido, pc(c.fot, c.total), pc(c.en_drive, c.total)];
+  hojasDe(arr).forEach(h => res.push(filaRes(h.hoja, h)));
+  res.push(filaRes('TOTAL', contar(arr)));
   const bytes = N.escribirXlsx([{ nombre: 'Avance', filas }, { nombre: 'Resumen', filas: res }]);
   const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -1129,11 +1431,13 @@ async function vistaAdmin(v) {
     <p class="hint" style="margin-bottom:10px;">Para agregar el Excel de un mes ve a <a href="#" data-acc="ir" data-tab="calendario">Calendario</a> y elige el mes.</p>
     <div id="ad-listas"></div>
     <div class="sec-t">Quién puede escanear</div><div id="ad-gente"><p class="hint">Cargando…</p></div>
+    <div class="sec-t">Avance para los jefes</div><div id="ad-avance"></div>
     <div class="sec-t">Conexión con Drive</div><div id="ad-conexion"><p class="hint">Cargando…</p></div>
     <div class="sec-t">Datos por revisar</div><div id="ad-alertas"></div>
     <input type="file" id="archivo" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">`;
   pintarAdminListas();
   pintarAdminAlertas();
+  pintarAdminAvance();
   const [tal, ext, cfg] = S.demo ? [{ data: Demo.talentos }, { data: Demo.externos }, { data: Demo.config() }] : await Promise.all([
     supa.from('talentos').select('id,nombre').order('nombre'),
     supa.from('foto_externos').select('id,nombre,activo,creado_en').order('creado_en'),
@@ -1165,8 +1469,18 @@ async function vistaAdmin(v) {
       <p class="hint" style="margin:4px 0 10px;">Si las fotos se guardan con el <b>serial</b> en el nombre (ej. <code>JDMQ0046001T778AV1-600F_1.jpg</code>) o en una carpeta con el serial, el scanner revisa la carpeta y avanza el paso solo. Nunca devuelve un paso.</p>
       ${S._carpetasAdmin.map((x, i) => `<div class="fila entre" style="padding:8px 0;border-top:1px solid var(--line);"><span class="crece">${esc(x.nombre || 'Carpeta')} → <b>${esc(N.etiquetaEstado(x.estado))}</b> <a href="https://drive.google.com/drive/folders/${esc(x.id)}" target="_blank" rel="noopener">abrir</a></span><button class="btn peligro peq" data-acc="carpeta-quitar" data-i="${i}">Quitar</button></div>`).join('')}
       <div class="campo" style="margin-top:10px;"><label for="cp-link">Link de la carpeta en Drive</label><input id="cp-link" placeholder="https://drive.google.com/drive/folders/…"></div>
-      <div class="fila"><input class="inp crece" id="cp-nombre" placeholder="Nombre (ej. Fotos editadas)"><select class="inp" id="cp-estado" style="width:auto;"><option value="fotografiado">Marca Fotografiada</option><option value="editado">Marca Editada</option><option value="subido" selected>Marca Subida</option></select></div>
+      <div class="fila"><input class="inp crece" id="cp-nombre" placeholder="Nombre (ej. Fotos finales)"><select class="inp" id="cp-estado" style="width:auto;"><option value="fotografiado">Marca Foto tomada</option><option value="descargada">Marca Foto descargada</option><option value="drive" selected>Marca En el drive</option><option value="subido">Marca Subida en página</option></select></div>
       <div class="fila" style="margin-top:10px;"><button class="btn" data-acc="carpeta-agregar">Agregar carpeta</button><button class="btn sec" data-acc="carpetas-revisar">${ico('sync')} Revisar ahora</button></div></div>`;
+}
+function pintarAdminAvance() {
+  const d = $('#ad-avance'); if (!d) return;
+  const url = S.hojaAvance;
+  d.innerHTML = `<div class="panel"><b style="font-weight:500;">Hoja de cálculo de avance</b>
+      <p class="hint" style="margin:4px 0 10px;">Una Hoja de Google <b>aparte</b> (no toca el Excel de digital) con un resumen por colección y por hoja, y una pestaña con cada referencia y su paso. El puente la actualiza sola cada 15 minutos y arriba dice a qué hora. Compártela con los jefes como <b>Lector</b>.</p>
+      ${url ? `<div class="caja-link"><span class="crece mono">${esc(url)}</span><button class="btn sec peq" data-acc="copiar" data-txt="${esc(url)}">${ico('copiar')} Copiar</button><a class="btn sec peq" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a></div>` : '<p class="hint">Todavía no está creada.</p>'}
+      <div class="fila" style="margin-top:10px;"><button class="btn ${url ? 'sec' : ''}" data-acc="cf-avance">${ico('sync')} ${url ? 'Actualizar ahora' : 'Crear la hoja de avance'}</button></div><div class="error" id="av-msg"></div></div>
+    <div class="panel"><b style="font-weight:500;">Link de dirección (Equipo Creativo)</b>
+      <p class="hint" style="margin:4px 0 0;">El link que le das al jefe en Equipo Creativo (<i>Links y respaldo → Vista de dirección</i>) ahora trae la sección <b>Fotografía</b>, en vivo y de solo lectura.</p></div>`;
 }
 function pintarAdminListas() {
   const d = $('#ad-listas'); if (!d) return;
@@ -1174,10 +1488,12 @@ function pintarAdminListas() {
   const porMes = new Map(); S.listas.forEach(l => { const k = mesClave(l.mes); if (!porMes.has(k)) porMes.set(k, []); porMes.get(k).push(l); });
   d.innerHTML = [...porMes.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([k, ls]) => `<div class="grupo-t"><span>${esc(N.nombreMes(k + '-01'))}</span><span>${ls.length}</span></div>` + ls.map(l => {
     const c = cuentasLista(l);
-    return `<div class="panel"><div class="fila entre"><b style="font-weight:500;">${esc(l.nombre)}</b>${l.activa ? '<span class="pill e-fotografiado">Activa</span>' : '<span class="pill">Archivada</span>'}</div>
-      <p class="hint" style="margin:4px 0 8px;">Encargado: <b>${esc(l.encargado || 'sin asignar — asígnale la tarea en Equipo Creativo')}</b> · ${l.total_refs} refs · ${c.fot} fotografiadas · ${c.subido} subidas · Excel leído ${esc(haceCuanto(l.sincronizada_en))}${l.sincronizada_por ? ' por ' + esc(l.sincronizada_por) : ''}
+    return `<div class="panel"><div class="fila entre"><b style="font-weight:500;">${esc(l.nombre)}</b>${l.activa ? '<span class="pill e-rol">Activa</span>' : '<span class="pill">Archivada</span>'}</div>
+      <p class="hint" style="margin:4px 0 8px;">Encargado: <b>${esc(l.encargado || 'sin asignar — asígnale la tarea en Equipo Creativo')}</b> · ${l.total_refs} refs · ${c.sin_foto} sin foto · ${c.en_drive} en el drive · Excel leído ${esc(haceCuanto(l.sincronizada_en))}${l.sincronizada_por ? ' por ' + esc(l.sincronizada_por) : ''}
       · ${l.tarea_id ? 'tarea en Equipo Creativo ✓' : '<span style="color:var(--warn)">sin tarea en Equipo Creativo</span>'}${l.archivo_id && l.archivo_id !== 'demo' ? ` · <a href="https://drive.google.com/file/d/${esc(l.archivo_id)}/view" target="_blank" rel="noopener">abrir en Drive</a>` : ''}</p>
+      ${l.activa ? avisoEscritura(l) : ''}
       <div class="fila">${l.archivo_id ? `<button class="btn sec peq" data-acc="lista-sync" data-id="${esc(l.id)}">${ico('sync')} Leer del Drive</button>` : ''}
+        <button class="btn sec peq" data-acc="lista-link" data-id="${esc(l.id)}">Cambiar link</button>
         <button class="btn sec peq" data-acc="lista-subir" data-id="${esc(l.id)}">${ico('subir')} Subir Excel</button>
         <button class="btn sec peq" data-acc="lista-activa" data-id="${esc(l.id)}">${l.activa ? 'Archivar' : 'Activar'}</button>
         <button class="btn peligro peq" data-acc="lista-borrar" data-id="${esc(l.id)}">Eliminar</button></div></div>`;
@@ -1221,6 +1537,19 @@ async function adminAccion(acc, el) {
       if (nueva) { await sincronizarLista(nueva, bytes || await traerDeDrive(nueva)); S.reporteLista = nueva.id; }
       S.repDatos = {}; await traerProgreso(); pintarVista();
       if (nueva) preguntarArrastre(S.listas.find(l => l.id === nueva.id) || nueva);
+    } else if (acc === 'lista-link') {
+      const nuevo = prompt(`Link nuevo del Excel u Hoja de Google de “${lista.nombre}”.\nEl avance que ya está marcado no se pierde.`, '');
+      if (nuevo == null || !nuevo.trim()) return;
+      const archivo = idDeDrive(nuevo); if (!archivo) return toast('Ese link de Drive no es válido', 4000);
+      if (S.demo) { const dl = Demo.listas.find(x => x.id === id); if (dl) { dl.archivo_id = archivo; dl.origen = 'drive'; } }
+      else { const r = await supa.from('foto_listas').update({ archivo_id: archivo, origen: 'drive' }).eq('id', id); if (r.error) throw new Error(r.error.message); }
+      // archivo nuevo: lo ya escrito en el archivo viejo se vuelve a escribir en el nuevo
+      Object.keys(S.hojaHecho).forEach(pid => { const p0 = S.prod.get(pid); if (!p0 || p0.lista_id === id) delete S.hojaHecho[pid]; });
+      S.colaHoja = (S.colaHoja || []).filter(x => x.lista !== id); S.hojaNo[id] = false; S.hojaFalla = {}; guardarColaHoja();
+      await cargarDatos(true);
+      const l2 = S.listas.find(x => x.id === id);
+      if (l2 && !S.demo) await sincronizarLista(l2, await traerDeDrive(l2)); else toast('Link cambiado');
+      pintarVista();
     } else if (acc === 'lista-sync') {
       el.disabled = true; el.textContent = 'Leyendo…';
       await sincronizarLista(lista, await traerDeDrive(lista)); pintarVista();
@@ -1253,12 +1582,23 @@ async function adminAccion(acc, el) {
       if (!S.demo) { const r = await supa.from('foto_config').upsert(filas); if (r.error) throw new Error(r.error.message); }
       S.puente = Object.assign({}, S.puente, { url: filas[0].valor, clave: filas[1].valor }); $('#cf-msg').textContent = ''; toast('Conexión guardada');
       await cargarDatos(false);
+    } else if (acc === 'cf-avance') {
+      const m = $('#av-msg'); m.style.color = ''; m.textContent = 'Armando la hoja de avance… (puede tardar unos segundos)';
+      if (S.demo) { S.hojaAvance = 'https://docs.google.com/spreadsheets/d/demo-hoja-de-avance/edit'; pintarAdminAvance(); toast('Modo prueba: así se vería el link'); return; }
+      if (!S.puente || !S.puente.url) { m.textContent = 'Primero conecta el puente (abajo, Conexión con Drive).'; return; }
+      try {
+        const u = new URL(S.puente.url); u.searchParams.set('k', S.puente.clave || ''); u.searchParams.set('accion', 'avance');
+        const j = await (await fetch(u.toString(), { redirect: 'follow' })).json();
+        if (j && j.ok && j.url) { await cargarDatos(false); S.hojaAvance = S.hojaAvance || j.url; pintarAdminAvance(); toast('Hoja de avance lista'); }
+        else m.textContent = j && j.error === 'supabase' ? 'El puente no pudo leer Supabase: revisa que la CLAVE del puente sea la misma de aquí y que corriste el SQL nuevo.' : (j && (j.error === 'id' || j.error === 'accion')) ? 'Actualiza el código del puente (versión 6) para crear la hoja de avance.' : (j && j.error === 'clave') ? 'La CLAVE guardada aquí tiene que ser idéntica a la del código del puente y tener al menos 12 caracteres.' : (ERR_PUENTE[j && j.error] || 'El puente respondió con error' + (j && j.error ? ' (' + j.error + ')' : '') + '.');
+      } catch (e) { m.textContent = 'No pude conectar con el puente.'; }
     } else if (acc === 'cf-probar') {
       const m = $('#cf-msg'); m.style.color = ''; m.textContent = 'Probando…';
       try {
         const u = new URL($('#cf-url').value.trim()); u.searchParams.set('k', $('#cf-clave').value.trim()); u.searchParams.set('prueba', '1');
         const j = await (await fetch(u.toString(), { redirect: 'follow' })).json();
-        if (j.ok) { m.style.color = 'var(--ok)'; m.textContent = `Conectado ✓ (cuenta de Google: ${j.cuenta || 'ok'})`; } else m.textContent = ERR_PUENTE[j.error] || 'El puente respondió con error.';
+        if (j.ok) { m.style.color = j.version >= 6 ? 'var(--ok)' : 'var(--warn)'; m.textContent = `Conectado ✓ (cuenta de Google: ${j.cuenta || 'ok'})` + (j.version >= 6 ? ' · puente versión 6: arma la hoja de avance para los jefes' : ' · versión vieja del puente: actualiza su código (versión 6) para la hoja de avance'); }
+        else m.textContent = ERR_PUENTE[j.error] || 'El puente respondió con error.';
       } catch (e) { m.textContent = 'No pude conectar. Revisa la URL (debe terminar en /exec) y que el puente esté publicado para “Cualquier persona”.'; }
     } else if (acc === 'carpeta-agregar') {
       const link = $('#cp-link').value.trim();
@@ -1309,10 +1649,10 @@ async function revisarCarpetas(manual) {
         .map(x => ({ id: x.p.id, estado: c.estado, archivo: x.archivo }));
       if (!marcas.length) continue;
       const r = S.demo ? Demo.driveMarcar(marcas) : await rpc('foto_drive_marcar', { p_token: tok(), p_marcas: marcas });
-      if (r.ok) total += r.n;
+      if (r.ok) { total += r.n; (S._marcasCarpeta = S._marcasCarpeta || []).push(...marcas.map(m => m.id)); }
     } catch (e) { if (manual) toast(e.message, 5000); }
   }
-  if (total) { await cargarDatos(false); repintarSuave(); toast(`Carpeta de fotos: ${total} referencia${total === 1 ? ' avanzó sola' : 's avanzaron solas'}`, 4500); }
+  if (total) { await cargarDatos(false); aHoja((S._marcasCarpeta || []).map(id => S.prod.get(id))); S._marcasCarpeta = []; repintarSuave(); toast(`Carpeta de fotos: ${total} referencia${total === 1 ? ' avanzó sola' : 's avanzaron solas'}`, 4500); }
   else if (manual) toast('Carpeta revisada: nada nuevo');
 }
 
@@ -1356,6 +1696,13 @@ document.addEventListener('click', async e => {
   else if (acc === 'cal-mes') { S.calMes = el.dataset.mes; pintarCalendario(); pintarMes(); pintarFormMes(); pintarReporte(false); }
   else if (acc === 'ver-col') { S.reporteLista = el.dataset.id; pintarMes(); pintarReporte(false); const r = $('#rep'); if (r) r.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   else if (acc === 'cambios') abrirCambios(el.dataset.id);
+  else if (acc === 'hojas') abrirHojas();
+  else if (acc === 'mano') { $$('.ov').forEach(o => o.remove()); if (S.tab !== 'escanear') { S.tab = 'escanear'; pintar(); setTimeout(() => Mano.desdeCamara(true), 1200); } else Mano.desdeCamara(true); }
+  else if (acc === 'mano-ok') { const m = S.resultadoMano; S.resultadoMano = null; Cam.pausar(0); if (m) { S.ultimo = { c: '', t: 0 }; alDetectar(m.s, 'mano'); } }
+  else if (acc === 'mano-no') { const m = S.resultadoMano; S.resultadoMano = null; Cam.pausar(1500); Mano.previo = null; pintarResultado(); toast('Descartado. Si quieres, escríbelo en Buscar.', 3500); }
+  else if (acc === 'mano-buscar') { $$('.ov').forEach(o => o.remove()); S.resultadoMano = null; S.buscar = el.dataset.q || ''; S.tab = 'buscar'; pintar(); }
+  else if (acc === 'mano-ver') { const m = (S._manoFotos || [])[Number(el.dataset.i)]; if (m) { $$('.ov').forEach(o => o.remove()); S.resultadoMano = m; S.tab = 'escanear'; pintar(); } }
+  else if (acc === 'ver-hoja') { $$('.ov').forEach(o => o.remove()); S.filtros.hoja = el.dataset.hoja; S.filtros.estado = '*'; S.filtros.sede = '*'; S._filtroTocado = true; S.tab = 'pendientes'; pintar(); window.scrollTo(0, 0); }
   else if (acc === 'pasar-ok') pasarPendientes(el);
   else if (acc === 'sesion-on') { S.sesionOn = true; guardarSesion(); toast('Sesión iniciada: cada referencia que escanees se suma'); }
   else if (acc === 'sesion-ver') abrirSesion();
@@ -1432,7 +1779,7 @@ async function salir() {
 }
 
 async function entrar() {
-  cargarCola(); cargarSesion();
+  cargarCola(); cargarSesion(); cargarColaHoja();
   const conCache = cargarCache();
   S.sede = leer('foto_sede') || '';
   // Accesos directos desde Equipo Creativo: …#calendario, …#admin
@@ -1513,13 +1860,14 @@ async function selectorPersona(forzar) {
    la memoria entre colecciones, la sesión en lote y la carpeta de fotos.
    ============================================================ */
 const Demo = {
-  listas: [], prod: [], eventos: [], versiones: {}, carpetas: [{ id: 'demo-carpeta', nombre: 'Fotos finales', estado: 'subido' }],
+  listas: [], prod: [], eventos: [], versiones: {}, carpetas: [{ id: 'demo-carpeta', nombre: 'Fotos finales', estado: 'drive' }],
   talentos: [{ id: 'demo-liz', nombre: 'Liz' }, { id: 'demo-mateo', nombre: 'Mateo' }], externos: [{ id: 'demo-foto', nombre: 'Fotógrafo estudio', activo: true }],
   iniciar() {
     const hoy = mesHoy(), d = new Date(hoy + 'T12:00:00'); d.setMonth(d.getMonth() - 1);
     const antes = d.toISOString().slice(0, 7) + '-01';
     const mk = (id, mes, activa) => ({ id, nombre: 'Dackel', mes, origen: 'drive', archivo_id: 'demo', activa, tarea_id: 'demo', total_refs: 0, sincronizada_en: ahoraIso(), sincronizada_por: 'Demo', creado_en: ahoraIso() });
     this.listas = [mk('demo-nov', hoy, true), mk('demo-oct', antes, false)];
+    S.tipoArchivo.demo = 'xlsx'; S.puenteVersion = 6;          // como el Excel real de digital: se lee, no se escribe
     const filas = [
       ['Jacob Cohen', '1495396917851', 'JDMQ0046001T778AV1-600F', ['149539691785108'], ['28'], 'JEANS JACOB COHEN DAMA NEGRO ALGODON T-28 915', [['Calle_109', 1], ['MEDELL', 1]]],
       ['Harmont & Blaine Shoes', '788001864630', 'EFM2410116160', ['78800186463021', '78800186463073', '78800186463075'], ['41', '41.5', '43.5'], 'TENIS H&B SHOES AZUL + BLANCO CUERO + POLIURE T-41', [['BOGOTA', 1], ['BQ/LLA', 1], ['Calle_109', 1], ['BODEGA CAL', 1]]],
@@ -1531,9 +1879,16 @@ const Demo = {
       ['Eddy Monetti', '2114683867957', 'FM47350-15', ['211468386795722', '211468386795721'], ['42', '41'], 'CAMISA EDDY MONETTI BLANCO RYS AZUL ALGODON T-42', [['Calle_109', 1], ['CARRERA 12', 2]]],
       ['Harmont & Blaine Peluches', '689062345777', 'beige-verde', ['68906234577761'], [''], 'PELUCHE PARA NIÑO MAYOR DE 3 AÑOS BEIGE-VERDE', [['BQ/LLA', 1], ['Calle_109', 1]]]
     ];
-    const prod = (f, i, lista, estado, por) => ({ id: `${lista}-p${i}`, lista_id: lista, marca: f[0], hoja: f[0], ref_base: f[1], serial: f[2], codigos: f[3], tallas: f[4], descripcion: f[5],
-      bodegas: f[6].map(([b, n]) => ({ b, n })), extra: {}, alertas: [], fila: i + 2, activo: true, estado, estado_por: por, estado_en: por ? ahoraIso() : null, actualizado_en: ahoraIso() });
-    this.prod = filas.map((f, i) => prod(f, i, 'demo-nov', i === 1 ? 'fotografiado' : i === 4 ? 'subido' : 'pendiente', i === 1 || i === 4 ? 'Liz' : null));
+    // Hojas como las del Excel real de digital (cada hoja es una marca o grupo)
+    const HOJA = { 'Harmont & Blaine Shoes': 'Harmont y Blaine Shoes', 'Harmont & Blaine Peluches': 'H&B Peluches' };
+    const ORDEN_H = ['Eddy Monetti', 'H&B Peluches', 'Harmont y Blaine Shoes', 'Paul Smith', 'Jacob Cohen'];
+    const prod = (f, i, lista, estado, por) => { const hoja = HOJA[f[0]] || f[0]; return { id: `${lista}-p${i}`, lista_id: lista, marca: f[0], hoja, hoja_n: ORDEN_H.indexOf(hoja) + 1, ref_base: f[1], serial: f[2], codigos: f[3], tallas: f[4], descripcion: f[5],
+      bodegas: f[6].map(([b, n]) => ({ b, n })), extra: {}, alertas: [], fila: i + 2, activo: true, estado, estado_por: por, estado_en: por ? ahoraIso() : null, actualizado_en: ahoraIso() }; };
+    const PASO = { 1: ['fotografiado', 'Liz'], 3: ['drive', 'Excel · hoja Harmont y Blaine Shoes'], 4: ['descargada', 'Liz'], 8: ['drive', 'Excel · hoja H&B Peluches'] };
+    this.prod = filas.map((f, i) => prod(f, i, 'demo-nov', (PASO[i] || ['pendiente'])[0], (PASO[i] || [])[1] || null));
+    this.prod.filter(p => /^Excel/.test(p.estado_por || '')).forEach(p => { p.estado_excel = 'drive'; });
+    // más peluches, como en el Excel real: todos "En el drive"
+    ['beige-rosado', 'café-verde', 'gris-azul'].forEach((c, k) => this.prod.push(Object.assign(prod(['Harmont & Blaine Peluches', '68906' + (4123500 + k), c, ['68906' + (4123500 + k) + '60'], [''], 'PELUCHE PARA NIÑO MAYOR DE 3 AÑOS ' + c.toUpperCase(), [['Calle_109', 1]]], 30 + k, 'demo-nov', 'drive', 'Excel · hoja H&B Peluches'), { estado_excel: 'drive' })));
     // Octubre: la sudadera ya se subió; el tenis IM924 se fotografió → "está en otra colección"
     this.prod.push(prod(filas[5], 5, 'demo-oct', 'subido', 'Mateo'), prod(filas[2], 2, 'demo-oct', 'fotografiado', 'Liz'),
       prod(['Paul Smith', '1924835915406', 'M2R-220X-TP5408-79', ['192483591540603'], ['M'], 'CAMISETA-TSHIRT PAUL SMITH NEGRO ALGODON T-M IM915', [['MEDELL', 1]]], 20, 'demo-oct', 'subido', 'Mateo'));
@@ -1555,11 +1910,11 @@ const Demo = {
     return this.conOtra(p);
   },
   progreso(l) {
-    const ps = this.prod.filter(p => p.lista_id === l.id && !p.movido_a), c = k => ps.filter(p => p.estado === k).length;
-    const marcas = [...new Set(ps.map(p => p.marca))].map(m => { const q = ps.filter(p => p.marca === m); return { marca: m, total: q.length, fotografiadas: q.filter(N.yaFotografiada).length, editadas: q.filter(p => N.ORDEN[p.estado] >= 3).length, subidas: q.filter(p => p.estado === 'subido').length }; });
+    const ps = this.prod.filter(p => p.lista_id === l.id && !p.movido_a), c = k => ps.filter(p => N.normEstado(p.estado) === k).length;
+    const hojas = hojasDe(ps).map(h => ({ hoja: h.hoja, total: h.total, pendiente: h.pendiente, localizado: h.localizado, fotografiado: h.fotografiado, descargada: h.descargada, drive: h.drive, subido: h.subido }));
     const per = {}; this.eventos.filter(e => e.accion === 'estado' && e.estado_nuevo === 'fotografiado' && e.lista_id === l.id).forEach(e => { per[e.actor_nombre] = (per[e.actor_nombre] || 0) + 1; });
-    return { lista_id: l.id, tarea_id: 'demo', nombre: l.nombre, mes: l.mes, activa: l.activa, total: ps.length, pendiente: c('pendiente'), localizado: c('localizado'), fotografiado: c('fotografiado'), editado: c('editado'), subido: c('subido'),
-      arrastrados: ps.filter(p => p.arrastrado_de).length, otra: ps.filter(p => this.prod.some(q => q.ref_base === p.ref_base && q.lista_id !== p.lista_id)).length, marcas,
+    return { lista_id: l.id, tarea_id: 'demo', nombre: l.nombre, mes: l.mes, activa: l.activa, total: ps.length, pendiente: c('pendiente'), localizado: c('localizado'), fotografiado: c('fotografiado'), descargada: c('descargada'), drive: c('drive'), subido: c('subido'),
+      arrastrados: ps.filter(p => p.arrastrado_de).length, otra: ps.filter(p => this.prod.some(q => q.ref_base === p.ref_base && q.lista_id !== p.lista_id)).length, hojas,
       personas: l.id === 'demo-nov' ? [{ nombre: 'Liz', fotos: 2 }, ...Object.entries(per).map(([nombre, fotos]) => ({ nombre, fotos }))] : [{ nombre: 'Mateo', fotos: 2 }, { nombre: 'Liz', fotos: 1 }] };
   },
   async rpc(fn, a) {
@@ -1589,15 +1944,16 @@ const Demo = {
       return { ok: true, tiempos: { loc_fot: 1.4, fot_sub: 3.2, loc_sub: 4.8, n_fot: 42, n_sub: 31 }, semanas: sem, dias };
     }
     if (fn === 'foto_sync') {
-      const l = this.listas.find(x => x.id === a.p_lista); const nv = [];
+      const l = this.listas.find(x => x.id === a.p_lista); const nv = []; let excel = 0;
       a.p_productos.forEach((x, i) => {
-        const ex = this.prod.find(p => p.lista_id === l.id && p.ref_base === x.ref_base);
-        if (ex) Object.assign(ex, x, { estado: ex.estado }); else { nv.push({ ref: x.ref_base, desc: x.descripcion, marca: x.marca }); this.prod.push(Object.assign({ id: 'demo-n' + Date.now() + i, lista_id: l.id, estado: 'pendiente', activo: true }, x)); }
+        let ex = this.prod.find(p => p.lista_id === l.id && p.ref_base === x.ref_base);
+        if (ex) Object.assign(ex, x, { estado: ex.estado }); else { nv.push({ ref: x.ref_base, desc: x.descripcion, marca: x.marca }); ex = Object.assign({ id: 'demo-n' + Date.now() + i, lista_id: l.id, estado: 'pendiente', activo: true }, x); this.prod.push(ex); }
+        if (x.estado_excel && N.ORDEN[x.estado_excel] > N.ORDEN[ex.estado]) { ex.estado = x.estado_excel; ex.estado_por = 'Excel · hoja ' + (x.hoja || ''); ex.estado_en = ahoraIso(); excel++; }
       });
       l.total_refs = this.prod.filter(p => p.lista_id === l.id).length; l.sincronizada_en = ahoraIso();
       const primera = !(this.versiones[l.id] || []).length;
       (this.versiones[l.id] = this.versiones[l.id] || []).unshift({ creado_en: ahoraIso(), por: 'Tú (demo)', primera, total: l.total_refs, nuevos: primera ? [] : nv, quitados: [] });
-      return { ok: true, total: l.total_refs, nuevos: primera ? 0 : nv.length, quitados: 0, primera, lista_nuevos: primera ? [] : nv, lista_quitados: [] };
+      return { ok: true, total: l.total_refs, nuevos: primera ? 0 : nv.length, quitados: 0, primera, excel, hojas: this.progreso(l).hojas, lista_nuevos: primera ? [] : nv, lista_quitados: [] };
     }
     if (fn === 'foto_salir') return { ok: true };
     return { ok: false, error: 'demo' };
@@ -1607,17 +1963,28 @@ const Demo = {
   borrarLista(id) { this.listas = this.listas.filter(l => l.id !== id); this.prod = this.prod.filter(p => p.lista_id !== id); },
   pasar(origen, destino, archivar) {
     let n = 0;
-    this.prod.filter(p => p.lista_id === origen && !p.movido_a && p.estado !== 'subido').forEach(p => {
+    this.prod.filter(p => p.lista_id === origen && !p.movido_a && !N.enDrive(p)).forEach(p => {
       const d = this.prod.find(q => q.lista_id === destino && q.ref_base === p.ref_base);
       if (d) { if (N.ORDEN[p.estado] > N.ORDEN[d.estado]) d.estado = p.estado; }
       else this.prod.push(Object.assign(this.copia(p), { id: p.id + '-a', lista_id: destino, arrastrado_de: origen }));
       p.movido_a = destino; n++;
     });
-    const quedan = this.prod.some(p => p.lista_id === origen && !p.movido_a && p.estado !== 'subido');
+    const quedan = this.prod.some(p => p.lista_id === origen && !p.movido_a && !N.enDrive(p));
     if (archivar && !quedan) this.listas.find(l => l.id === origen).activa = false;
     return { ok: true, pasados: n };
   },
   driveMarcar(marcas) { marcas.forEach(m => this.marcar(m.id, m.estado)); return { ok: true, n: marcas.length }; },
+  hojaEscrita: [],
+  escribirHoja(lote) {         // simula el puente v5: Eddy Monetti no tiene lista desplegable (como en el Excel real)
+    const TXT = { fotografiado: 'Foto tomada', descargada: 'Foto descargada', drive: 'En el drive', subido: 'Subido en la pagina' };
+    return { ok: true, version: 5, resultados: lote.map(x => {
+      if (x.h === 'Eddy Monetti') return { r: x.r, e: x.e, error: 'columna' };
+      const p = this.prod.find(q => q.id === x.id); const antes = p && p.estado_excel ? TXT[p.estado_excel] : '';
+      if (p && N.ORDEN[p.estado_excel] >= N.ORDEN[x.e]) return { r: x.r, e: x.e, ok: true, igual: true, antes };
+      if (p) p.estado_excel = x.e; this.hojaEscrita.push(x.h + ' · ' + x.r + ' → ' + TXT[x.e]);
+      return { r: x.r, e: x.e, ok: true, antes, ahora: TXT[x.e] };
+    }) };
+  },
   async archivosCarpeta() { return [{ n: 'M2S-LEE19-JLEA-79_frente.jpg', r: 'Fotos finales' }, { n: 'M2S-LEE19-JLEA-79_detalle.jpg', r: 'Fotos finales' }, { n: 'IMG_4521.jpg', r: 'Fotos finales' }]; },
   async excel() { throw new Error('En modo prueba no hay Drive conectado. Usa “Subir Excel”.'); }
 };
