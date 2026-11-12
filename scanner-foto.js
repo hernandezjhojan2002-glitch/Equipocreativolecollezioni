@@ -633,7 +633,8 @@ const pillEstado = e => `<span class="pill e-${esc(e)}">${esc(N.etiquetaEstado(e
 
 function pintarTop() {
   const t = $('.top'); if (!t) return;
-  t.innerHTML = `<div class="marca">${logo(22)}<span class="sub">Scanner foto</span></div>
+  const volver = S.modo === 'admin' ? 'equipo-creativo-admin.html' : S.modo === 'talento' ? 'equipo-creativo.html?aprendiz=' + encodeURIComponent(S.persona || '') : '';
+  t.innerHTML = `${volver ? `<a class="marca volver" href="${esc(volver)}" title="Volver a Equipo Creativo" aria-label="Volver a Equipo Creativo"><span class="flecha" aria-hidden="true">‹</span>` : '<div class="marca">'}${logo(22)}<span class="sub">Scanner foto</span>${volver ? '</a>' : '</div>'}
     <div class="acciones">
       <button class="chip" data-acc="sede" title="Dónde estás">${ico('pin')}<b>${esc(S.sede ? N.nombreSede(S.sede) : 'Sede')}</b></button>
       <button class="icon-btn" id="ind" data-acc="sync" title="Actualizar" aria-label="Actualizar">${ico('sync')}</button>
@@ -1434,6 +1435,9 @@ async function entrar() {
   cargarCola(); cargarSesion();
   const conCache = cargarCache();
   S.sede = leer('foto_sede') || '';
+  // Accesos directos desde Equipo Creativo: …#calendario, …#admin
+  const h = (location.hash || '').slice(1);
+  if (['calendario', 'buscar', 'pendientes'].includes(h) || (h === 'admin' && (S.modo === 'admin' || S.modo === 'demo'))) S.tab = h;
   if (conCache) { pintar(); }
   else { $('#app').innerHTML = `<div class="gate"><div class="gate-card"><div class="logo">${logo(40)}</div><p>Cargando la lista…</p></div></div>`; }
   const r = await cargarDatos(true);

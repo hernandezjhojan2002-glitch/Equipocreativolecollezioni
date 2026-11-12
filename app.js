@@ -3866,6 +3866,20 @@ function fotoReporteHTML(t) {
     ${boton}
   </div>`;
 }
+// Acceso directo al scanner desde Equipo Creativo (inicio, menú lateral, barra de arriba y vista del aprendiz)
+ICONS.scanner = '<path d="M2 5V2.5h2.5M11.5 2.5H14V5M14 11v2.5h-2.5M4.5 13.5H2V11"/><path d="M5 5.5v5M7 5.5v5M9 5.5v5M11 5.5v5"/>';
+function fotoPanelInicioHTML() {
+  const tareas = (STATE.tareas || []).filter(t => esTareaFoto(t) && t.estado !== 'completada');
+  const filas = tareas.map(t => {
+    const x = STATE.fotoProg[String(t.id)], c = x ? fotoCuentas(x) : null;
+    const enc = t.talento_id ? talentoNombre(t.talento_id) : 'Sin encargado';
+    return `<div class="foto-ini-fila"><div class="foto-ini-t"><b>${esc(String(t.titulo || '').replace(/^Fotografía · /, ''))}</b>
+      <span>${esc(enc)}${c ? ` · ${c.fot}/${c.total} fotografiadas · ${c.sub} subidas` : ''}</span></div>${c ? fotoBarraHTML(c) : ''}</div>`;
+  }).join('');
+  return `<div class="foto-ini"><div class="foto-ini-h"><div><b>Fotografía de producto</b><span>${tareas.length ? `${tareas.length} colección${tareas.length === 1 ? '' : 'es'} en curso` : 'Sin colecciones en curso'}</span></div>
+    <span class="foto-ini-acc"><a class="btn foto-ini-btn" href="scanner-foto.html?admin=1">${ico('scanner')} Abrir scanner</a><button type="button" class="btn secondary foto-ini-btn" id="foto-ir">Links y avance</button></span></div>${filas}</div>`;
+}
+
 (function () {
   const css = document.createElement('style');
   css.textContent = `
@@ -3887,7 +3901,18 @@ function fotoReporteHTML(t) {
   .foto-det summary{cursor:pointer;font-size:12.5px;color:var(--ink-2);margin:6px 0;}
   .foto-det table{width:100%;border-collapse:collapse;font-size:12.5px;}
   .foto-det th,.foto-det td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);}
-  .foto-btn{margin-top:10px;width:100%;justify-content:center;text-decoration:none;}`;
+  .foto-btn{margin-top:10px;width:100%;justify-content:center;text-decoration:none;}
+  .foto-ini{border:1px solid var(--line);border-radius:var(--r-lg);background:var(--panel);padding:16px;margin:0 0 20px;}
+  .foto-ini-h{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .foto-ini-h b{font-weight:500;display:block;} .foto-ini-h span{font-size:13px;color:var(--ink-2);}
+  .foto-ini-btn{text-decoration:none;}
+  .foto-ini-acc{display:flex;gap:6px;flex-wrap:wrap;}
+  .foto-ini-fila{padding:10px 0 4px;border-top:1px solid var(--line);margin-top:10px;}
+  .foto-ini-t{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13.5px;margin-bottom:6px;}
+  .foto-ini-t b{font-weight:500;} .foto-ini-t span{color:var(--ink-2);}
+  a#rail-scanner,a#cmd-scanner,a.foto-top-btn{text-decoration:none;color:inherit;}
+  a#cmd-scanner{display:grid;place-items:center;}
+  a.foto-top-btn{display:inline-flex;align-items:center;gap:6px;}`;
   document.head.appendChild(css);
 
   const _loadAll = loadAll;
@@ -3896,6 +3921,24 @@ function fotoReporteHTML(t) {
   cargarAprendiz = async function () { const r = await _cargarAprendiz.apply(this, arguments); if (r && r.ok) await cargarProgresoFotos(); return r; };
   const _cargarDireccion = cargarDireccion;
   cargarDireccion = async function () { const r = await _cargarDireccion.apply(this, arguments); if (r && r.ok) await cargarProgresoFotos(); return r; };
+
+  const _renderAdminApp = renderAdminApp;
+  renderAdminApp = function () {
+    _renderAdminApp.apply(this, arguments);
+    const der = document.querySelector('.cmd-right');
+    if (der && !document.getElementById('cmd-scanner')) {
+      const b = document.createElement('a'); b.id = 'cmd-scanner'; b.className = 'cmd-btn'; b.href = 'scanner-foto.html?admin=1';
+      b.title = 'Scanner de fotos'; b.setAttribute('aria-label', 'Abrir el scanner de fotos'); b.innerHTML = ico('scanner');
+      der.insertBefore(b, der.firstChild);
+    }
+  };
+  const _renderAdminDashboard = renderAdminDashboard;
+  renderAdminDashboard = function () {
+    _renderAdminDashboard.apply(this, arguments);
+    const hola = document.querySelector('#view-dashboard .section-title.hello');
+    if (hola) hola.insertAdjacentHTML('afterend', fotoPanelInicioHTML());
+    const b = document.getElementById('foto-ir'); if (b) b.onclick = () => irATab('fotografia');
+  };
 
   const _sello = selloKanban;
   selloKanban = function (t) { return _sello(t) + fotoMiniHTML(t); };
@@ -3913,6 +3956,148 @@ function fotoReporteHTML(t) {
       STATE._tFoto = setTimeout(async () => { if (await cargarProgresoFotos() && STATE._refrescar) STATE._refrescar(); }, 1500);
     });
     STATE._canalFoto.subscribe();
+  };
+})();
+
+/* ============================================================
+   FOTOGRAFÍA · acceso desde Equipo Creativo (sin buscar links)
+   - Admin: sección "Fotografía" (menú, Resumen y Crear) con el
+     avance, el botón al scanner y TODOS los links (admin, equipo,
+     practicantes, asesores y modo prueba para mostrarle a un jefe).
+   - Practicantes: botón "Scanner de fotos" en su inicio.
+   - Dirección: link al modo prueba.
+   ============================================================ */
+ICONS.fotografia = '<path d="M2 5.2h2.6l1.2-1.9h4.4l1.2 1.9H14V13H2z"/><circle cx="8" cy="8.9" r="2.4"/>';
+function urlScanner(q) { return new URL('scanner-foto.html' + (q || ''), location.href).href; }
+function fotoCopiar(txt, msg) {
+  const ok = () => toast(msg || 'Link copiado');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, () => toast(txt)); else toast(txt);
+}
+function tareasFotoActivas() { return (STATE.tareas || []).filter(t => esTareaFoto(t) && t.estado !== 'completada'); }
+function fotoFilaLink(titulo, desc, url, extra) {
+  return `<div class="foto-link"><div class="foto-link-t"><b>${esc(titulo)}</b><span>${desc}</span><code>${esc(url)}</code></div>
+    <div class="foto-link-a"><button type="button" class="btn secondary small" data-foto-copiar="${esc(url)}">${ico('links')} Copiar</button><a class="btn secondary small" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a>${extra || ''}</div></div>`;
+}
+function fotoActivarBotones(raiz) {
+  (raiz || document).querySelectorAll('[data-foto-copiar]').forEach(b => { b.onclick = () => fotoCopiar(b.dataset.fotoCopiar); });
+}
+function fotoResumenHTML(compacto) {
+  const ts = tareasFotoActivas();
+  if (!ts.length) return `<p class="hint">No hay colecciones de fotos activas. Créalas en el scanner: Calendario → elige el mes → Agregar Excel.</p>`;
+  return ts.map(t => {
+    const x = STATE.fotoProg[String(t.id)], c = x ? fotoCuentas(x) : null;
+    const enc = t.talento_id ? talentoNombre(t.talento_id) : 'Sin encargado';
+    return `<div class="foto-col"><div class="foto-col-h"><b>${esc(t.titulo)}</b>${pillEstadoTarea(t)}</div>
+      ${c ? fotoBarraHTML(c) : ''}
+      <div class="foto-mini-t"><span>${c ? `<b>${c.fot}</b>/${c.total} fotografiadas · <b>${c.sub}</b> subidas` : 'Sin datos del scanner todavía'}</span><span>Encargado: ${esc(enc)}</span></div></div>`;
+  }).join('');
+}
+function renderAdminFotografia() {
+  const v = $('#view-fotografia'); if (!v) return;
+  const admin = urlScanner('?admin=1'), equipo = urlScanner(''), demo = urlScanner('?demo=1');
+  const talentos = (STATE.talentos || []).filter(t => t.estado !== 'inactivo');
+  v.innerHTML = `
+    <div class="section-title hello"><span class="hello-kicker">Scanner de fotografía</span><h1>Fotografía</h1>
+      <p class="hello-sub">Escanea etiquetas, mira qué falta por fotografiar y lleva el avance de cada colección del mes.</p></div>
+    <div class="foto-acciones"><a class="btn" href="${esc(admin)}" target="_blank" rel="noopener">${ico('fotografia')} Abrir scanner (administrador)</a>
+      <a class="btn secondary" href="${esc(urlScanner('?admin=1#calendario'))}" target="_blank" rel="noopener">${ico('calendario')} Calendario y reportes</a>
+      <a class="btn secondary" href="${esc(urlScanner('?admin=1#admin'))}" target="_blank" rel="noopener">${ico('talentos')} Asesores, Drive y ajustes</a></div>
+    <div class="section-title">Colecciones activas</div>
+    <div class="foto-panel">${fotoResumenHTML()}</div>
+    <div class="section-title">Links</div>
+    <div class="foto-panel">
+      ${fotoFilaLink('Tú (administrador)', 'Entras con tu correo y contraseña de Equipo Creativo. Puedes todo: crear colecciones, marcar, ver reportes y dar accesos.', admin)}
+      ${fotoFilaLink('Equipo y asesores · link fijo', 'Es el mismo link para todos y <b>no cambia nunca</b>. Cada persona elige su nombre y pone su clave. Marca pasos solo quien tenga asignada la tarea de Fotografía; los demás (practicantes y asesores) entran en solo consulta.', equipo)}
+      <details class="foto-det"><summary>Links personales de practicantes (opcional)</summary>
+        ${talentos.length ? talentos.map(t => fotoFilaLink(t.nombre, 'Entra directo como esta persona (con su misma clave de Equipo Creativo).', urlScanner('?aprendiz=' + encodeURIComponent(t.id)))).join('') : '<p class="hint">No hay practicantes activos.</p>'}
+      </details>
+      <p class="hint" style="margin-top:10px;"><b>Asesores y tiendas:</b> se crean en el scanner → Admin → Quién puede escanear (te da su clave). Después entran por el link fijo del equipo.</p>
+    </div>
+    <div class="section-title">Para probar · modo prueba</div>
+    <div class="foto-panel"><p class="hint" style="margin-bottom:8px;">Datos de ejemplo: no pide clave y no guarda nada. Ideal para mostrárselo a tu jefe o para enseñar a un practicante nuevo. Prueba con la etiqueta Jacob Cohen (149539691785108).</p>
+      ${fotoFilaLink('Como jefe (administrador)', 'Ve todo, incluido Admin y el calendario para agregar Excel.', demo)}
+      ${fotoFilaLink('Como encargado de fotos', 'Escanea y marca los pasos (como David).', urlScanner('?demo=1&rol=encargado'))}
+      ${fotoFilaLink('Solo consulta', 'Escanea y busca, sin poder cambiar nada (como un asesor o un practicante sin la tarea).', urlScanner('?demo=1&rol=consulta'))}
+    </div>
+    <div class="section-title">¿Cómo funciona con el Drive?</div>
+    <div class="foto-panel foto-como">
+      <ol>
+        <li><b>Digital deja el Excel en el Drive</b> (como "fotos pendientes Dackel").</li>
+        <li><b>El puente (Apps Script) lo abre con tu cuenta de Google</b>. El scanner, por estar en otra página, no puede entrar al Drive solo; el puente es un mensajero que vive dentro de Google, lee el archivo con tus permisos y se lo entrega. Solo responde si recibe tu frase secreta (CLAVE) y no modifica nada en el Drive.</li>
+        <li><b>El scanner lee las columnas</b> (Ref base, Serial, Códigos, Tallas, Bodegas…) y guarda la colección del mes en Supabase, la misma base de Equipo Creativo.</li>
+        <li><b>Se relee solo</b> cada vez que alguien con permiso abre el scanner (si pasaron más de 10 min) o con el botón ⟳. Si digital agrega o quita referencias, se ve en "Qué cambió en el Excel" y el avance no se pierde.</li>
+        <li><b>Carpeta de fotos (opcional):</b> el mismo puente revisa la carpeta de fotos y, si encuentra un archivo con el serial en el nombre, avanza el paso solo.</li>
+      </ol>
+      <p class="hint">El link del Excel lo pegas una vez por mes en el scanner: Calendario → elige el mes → Agregar Excel. Eso crea aquí la tarea "Fotografía · Mes · Colección" con entrega al cierre del mes.</p>
+    </div>`;
+  fotoActivarBotones(v);
+}
+(function () {
+  const css = document.createElement('style');
+  css.textContent = `
+  .foto-acciones{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px;}
+  .foto-acciones .btn{text-decoration:none;}
+  .foto-panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:14px 16px;margin-bottom:16px;}
+  .foto-col{padding:10px 0;border-bottom:1px solid var(--line);} .foto-col:last-child{border-bottom:0;}
+  .foto-col-h{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;font-size:14px;}
+  .foto-col-h b{font-weight:500;}
+  .foto-link{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line);}
+  .foto-link:last-of-type{border-bottom:0;}
+  .foto-link-t{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 280px;font-size:13.5px;}
+  .foto-link-t b{font-weight:500;font-size:14.5px;} .foto-link-t span{color:var(--ink-2);}
+  .foto-link-t code{font-size:11.5px;color:var(--ink-3);overflow-wrap:anywhere;}
+  .foto-link-a{display:flex;gap:6px;flex:none;} .foto-link-a .btn{text-decoration:none;}
+  .foto-como ol{margin:0 0 8px 18px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.5;}
+  .foto-home{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:14px 16px;margin:0 0 16px;}
+  .foto-home .t{display:flex;gap:12px;align-items:center;min-width:0;flex:1 1 240px;}
+  .foto-home .t svg{width:26px;height:26px;flex:none;}
+  .foto-home b{font-weight:500;display:block;} .foto-home span{font-size:13px;color:var(--ink-2);}
+  .foto-home .a{display:flex;gap:6px;flex-wrap:wrap;} .foto-home .btn{text-decoration:none;}`;
+  document.head.appendChild(css);
+
+  // Menú del administrador: nueva sección "Fotografía"
+  if (!TABS_ADMIN.some(x => x[0] === 'fotografia')) TABS_ADMIN.splice(TABS_ADMIN.findIndex(x => x[0] === 'calendario') + 1, 0, ['fotografia', 'Fotografía']);
+  const _app = renderAdminApp;
+  renderAdminApp = function () {
+    const r = _app.apply(this, arguments);
+    const cal = document.querySelector('.rail-item[data-tab="calendario"]');
+    if (cal && !document.querySelector('.rail-item[data-tab="fotografia"]')) {
+      cal.insertAdjacentHTML('afterend', `<button type="button" class="rail-item" data-tab="fotografia" data-tip="Fotografía">${ico('fotografia', 'rail-ico')}<span class="lbl">Fotografía</span><span class="nav-badge" id="badge-fotografia"></span></button>`);
+      document.querySelector('.rail-item[data-tab="fotografia"]').onclick = () => irATab('fotografia');
+    }
+    const main = document.querySelector('.shell-main main');
+    if (main && !document.getElementById('view-fotografia')) main.insertAdjacentHTML('beforeend', '<div class="view" id="view-fotografia"></div>');
+    return r;
+  };
+  const _tab = renderAdminTab;
+  renderAdminTab = function () { const r = _tab.apply(this, arguments); if (STATE.activeTab === 'fotografia') renderAdminFotografia(); return r; };
+
+  // Menú "Crear": abrir el scanner
+  const _acc = accionesRapidas;
+  accionesRapidas = function () { return _acc.apply(this, arguments).concat([{ t: 'Abrir scanner de fotos', i: 'fotografia', f: () => window.open(urlScanner('?admin=1'), '_blank', 'noopener') }]); };
+
+  // Practicantes: botón en su inicio (encargado o solo consulta)
+  const _apr = renderAprendizVista;
+  renderAprendizVista = function () {
+    const r = _apr.apply(this, arguments);
+    const main = document.querySelector('#app main');
+    if (main && STATE.talentoId && !main.querySelector('.foto-home')) {
+      const encargado = tareasFotoActivas().some(t => t.talento_id === STATE.talentoId);
+      main.insertAdjacentHTML('afterbegin', `<div class="foto-home"><div class="t">${ico('fotografia')}<div><b>Scanner de fotos</b><span>${encargado ? 'Eres el encargado de fotografía: escanea y marca los pasos.' : 'Escanea una etiqueta para ver si está en la lista de fotos (solo consulta).'}</span></div></div>
+        <div class="a"><a class="btn small" href="${esc(urlScanner('?aprendiz=' + encodeURIComponent(STATE.talentoId)))}">Abrir scanner</a></div></div>`);
+    }
+    return r;
+  };
+  // Dirección: probar el scanner con datos de ejemplo
+  const _jefe = renderJefeVista;
+  renderJefeVista = function () {
+    const r = _jefe.apply(this, arguments);
+    const main = document.querySelector('#app main');
+    if (main && !main.querySelector('.foto-home')) {
+      main.insertAdjacentHTML('afterbegin', `<div class="foto-home"><div class="t">${ico('fotografia')}<div><b>Scanner de fotografía</b><span>Pruébalo con datos de ejemplo (no guarda nada). Etiqueta de prueba: 149539691785108.</span></div></div>
+        <div class="a"><a class="btn small secondary" href="${esc(urlScanner('?demo=1&rol=consulta'))}" target="_blank" rel="noopener">Probar scanner</a></div></div>`);
+    }
+    return r;
   };
 })();
 
