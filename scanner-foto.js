@@ -30,7 +30,10 @@ const S = {
   archivo: [], ixArchivo: new Map(), progreso: {}, repDatos: {}, calMes: '', calAnio: 0, sesionOn: false, sesion: [],
   permisos: { admin: false, marcar: [] }, demoRol: '',
   colaHoja: null, hojaHecho: {}, hojaFalla: {}, hojaNo: {}, tipoArchivo: {}, puenteVersion: undefined, puenteViejo: false,
-  errSync: {}, lecturaExcel: {}, sqlV: 0, hojaAvance: '', resultadoMano: null
+  apar: new Map(), busq: { q: '', res: [], cargando: false },
+  errSync: {}, lecturaExcel: {}, sqlV: 0, hojaAvance: '', resultadoMano: null,
+  coleccion: '', ultMarca: null,         // colección de trabajo ('' = todas) · último paso marcado en varias colecciones
+  buscarEn: '', lapiz: null, _lapices: [] // Excel donde buscan Buscar y el lápiz ('' = todos) · hoja del lápiz abierta
 };
 
 /* ---------- utilidades ---------- */
@@ -79,7 +82,8 @@ const ICON = {
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   imagen: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/>',
-  mano: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>'
+  mano: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>',
+  capas: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>'
 };
 const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`;
 const logo = h => `<img class="brand-logo-dark" src="${LOGO_LIGHT}" alt="LE COLLEZIONI" style="height:${h}px;width:auto;"><img class="brand-logo-light" src="${LOGO_DARK}" alt="LE COLLEZIONI" style="height:${h}px;width:auto;">`;
@@ -245,16 +249,18 @@ function construirArchivo() {
   const add = (k, e) => { if (!k) return; const a = m.get(k); if (!a) m.set(k, [e]); else a.push(e); };
   (S.archivo || []).forEach(x => {
     const e = { ref: x[0], serial: x[1], estado: x[2], lista_id: x[3] };
-    add(N.limpiar(x[0]), e);
-    (x[4] || []).forEach(c => { const cl = N.limpiar(c); add(cl, e); if (cl.length > 6) add(cl.slice(0, -2), e); });
+    const r0 = N.limpiar(x[0]); add(r0, e); if (N.sinCeros(r0) !== r0) add(N.sinCeros(r0), e);
+    (x[4] || []).forEach(c => { const cl = N.limpiar(c); [cl, N.sinCeros(cl)].forEach((k, i) => { if (i && k === cl) return; add(k, e); if (k.length > 6) add(k.slice(0, -2), e); }); });
     const s = N.alnum(x[1]); if (s.length >= 6 && /\d/.test(s)) add(s, e);
   });
   S.ixArchivo = m;
 }
-function buscarArchivo(c, manual) {
+function buscarArchivo(c, manual, lista) {
   const m = S.ixArchivo; if (!m || !m.size) return null;
+  if (lista && S.listas.some(l => l.id === lista && l.activa)) return null;      // escogiste una colección activa
   let mejor = null;
-  [c, c.length > 6 ? c.slice(0, -2) : '', manual ? N.alnum(c) : ''].filter(Boolean).forEach(k => (m.get(k) || []).forEach(e => { if (!mejor || N.ORDEN[e.estado] > N.ORDEN[mejor.estado]) mejor = e; }));
+  const c0 = N.sinCeros(c);
+  [c, c0, c.length > 6 ? c.slice(0, -2) : '', c0.length > 6 ? c0.slice(0, -2) : '', manual ? N.alnum(c) : ''].filter(Boolean).forEach(k => (m.get(k) || []).forEach(e => { if (lista && e.lista_id !== lista) return; if (!mejor || N.ORDEN[e.estado] > N.ORDEN[mejor.estado]) mejor = e; }));
   return mejor;
 }
 function aplicarCola(p) {                // lo pendiente de enviar manda sobre lo que dice el servidor
@@ -343,14 +349,14 @@ async function sincronizarLista(lista, bytes, silencioso) {
   if (!r.productos.length) throw new Error('No encontré referencias en ese Excel (revisa que tenga columnas como "Ref base" o "Códigos").');
   const s = await rpc('foto_sync', { p_token: tok(), p_lista: lista.id, p_productos: r.productos });
   if (!s.ok) throw new Error(s.error === 'permiso' ? 'No tienes permiso para actualizar listas.' : s.error === 'red' ? 'Sin conexión: intenta de nuevo.' : 'No pude guardar la lista (' + s.error + ').');
-  if (!s.v && !S.demo) S.sqlV = 0;                                    // el servidor todavía tiene el SQL viejo
+  if (!S.demo) S.sqlV = s.v || 0;                                     // el servidor todavía tiene el SQL viejo
   await cargarDatos(false);
   // Lo que se marcó en la app y la hoja todavía no dice (sin internet, carpeta de fotos, memoria…): se escribe
   aHoja([...S.prod.values()].filter(p => p.lista_id === lista.id));
-  if (!silencioso || s.nuevos || s.quitados) {
+  if (silencioso !== 'archivada' && (!silencioso || s.nuevos || s.quitados)) {
     const partes = [`${s.total} referencias`]; if (s.nuevos) partes.push(`${s.nuevos} nuevas`); if (s.quitados) partes.push(`${s.quitados} ya no están`);
     if (s.excel) partes.push(`${s.excel} avanzaron según el Excel`);
-    if (s.memoria) partes.push(`${s.memoria} ya subidas en otra colección`);
+    if (s.memoria) partes.push(`${s.memoria} con foto en otro Excel`);
     toast(`${lista.nombre}: ${partes.join(' · ')}`, 4000);
   }
   if (!silencioso) mostrarCambiosSync(lista, s, r);
@@ -363,13 +369,18 @@ async function autoSincronizar() {
   const versionNueva = !S.demo && leer('foto_ver_sync') !== VER_JS;          // app recién actualizada: se relee todo una vez
   const viejas = S.listas.filter(l => l.activa && l.origen === 'drive' && l.archivo_id && puedeMarcarLista(l.id) &&
     (versionNueva || !l.sincronizada_en || Date.now() - new Date(l.sincronizada_en).getTime() > SYNC_DRIVE_MIN * 60000));
-  if (viejas.length) {
+  // Las archivadas de los últimos 3 meses también se releen (una vez al día): digital a veces actualiza esos Excel después
+  const hace3 = new Date(); hace3.setMonth(hace3.getMonth() - 3); const limite = hace3.toISOString().slice(0, 7);
+  const archivadas = S.listas.filter(l => !l.activa && l.origen === 'drive' && l.archivo_id && puedeMarcarLista(l.id) && String(l.mes).slice(0, 7) >= limite &&
+    (!l.sincronizada_en || Date.now() - new Date(l.sincronizada_en).getTime() > 24 * 3600000)).slice(0, 3);
+  if (viejas.length || archivadas.length) {
     S.sincronizando = true; pintarIndicador();
     try {
       for (const l of viejas) {
         try { await sincronizarLista(l, await traerDeDrive(l), true); delete S.errSync[l.id]; }
         catch (e) { S.errSync[l.id] = { msg: e.message || 'error', cuando: ahoraIso() }; }
       }
+      for (const l of archivadas) { try { await sincronizarLista(l, await traerDeDrive(l), 'archivada'); } catch (e) {} }
       if (versionNueva) guardar('foto_ver_sync', VER_JS);
     }
     finally { S.sincronizando = false; pintarIndicador(); pintarEstadoLista(); }
@@ -508,18 +519,29 @@ const Mano = {
     this.w.onerror = () => { this.espera.forEach(f => f({ ok: false, motivo: 'error' })); this.espera.clear(); this.w = null; };
     return this.w;
   },
+  // Códigos con los que compara: los del Excel escogido en "Buscar en" (o todos: activos y archivados)
   candidatos() {
-    const c = [], visto = new Set();
+    const c = [], visto = new Set(), sc = S.buscarEn;
+    const add = (t, ref, id, tipo, talla, lista) => { t = String(t || ''); if (/^\d{8,16}$/.test(t) && !visto.has(t)) { visto.add(t); c.push({ s: t, ref, id, tipo, talla, lista }); } };
     for (const p of S.prod.values()) {
-      (p.codigos || []).forEach((cod, i) => { const t = String(cod); if (/^\d{8,16}$/.test(t) && !visto.has(t)) { visto.add(t); c.push({ s: t, ref: p.ref_base, id: p.id, tipo: 'codigo', talla: (p.tallas || [])[i] || '' }); } });
-      const r = String(p.ref_base || ''); if (/^\d{8,16}$/.test(r) && !visto.has(r)) { visto.add(r); c.push({ s: r, ref: p.ref_base, id: p.id, tipo: 'referencia', talla: '' }); }
+      if (sc && p.lista_id !== sc) continue;
+      (p.codigos || []).forEach((cod, i) => add(cod, p.ref_base, p.id, 'codigo', (p.tallas || [])[i] || '', p.lista_id));
+      add(p.ref_base, p.ref_base, p.id, 'referencia', '', p.lista_id);
     }
+    (S.archivo || []).forEach(x => { if (sc && x[3] !== sc) return; (x[4] || []).forEach(cod => add(cod, x[0], null, 'codigo', '', x[3])); add(x[0], x[0], null, 'referencia', '', x[3]); });
     return c;
+  },
+  // Recorte de lo que se leyó (la etiqueta), para mostrarlo en el lápiz
+  foto(rc) {
+    const cv = this._cv; if (!cv) return '';
+    const x0 = rc ? rc.x0 : 0, y0 = rc ? rc.y0 : 0, w = rc ? rc.x1 - rc.x0 + 1 : cv.width, h = rc ? rc.y1 - rc.y0 + 1 : cv.height;
+    const k = Math.min(1, 640 / w), o = document.createElement('canvas'); o.width = Math.round(w * k); o.height = Math.round(h * k);
+    try { o.getContext('2d').drawImage(cv, x0, y0, w, h, 0, 0, o.width, o.height); return o.toDataURL('image/jpeg', 0.82); } catch (e) { return ''; }
   },
   // fuente: <video> o <img>. Gris con el canal más oscuro (el esfero azul resalta)
   gris(fuente, ancho, alto, max) {
     const k = Math.min(1, (max || 1400) / Math.max(ancho, alto)), W = Math.max(1, Math.round(ancho * k)), H = Math.max(1, Math.round(alto * k));
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H; this._cv = cv;
     const ctx = cv.getContext('2d', { willReadFrequently: true }); ctx.drawImage(fuente, 0, 0, W, H);
     const d = ctx.getImageData(0, 0, W, H).data, g = new Uint8Array(W * H);
     for (let i = 0, j = 0; i < W * H; i++, j += 4) { const r = d[j], gg = d[j + 1], b = d[j + 2]; g[i] = r < gg ? (r < b ? r : b) : (gg < b ? gg : b); }
@@ -528,7 +550,7 @@ const Mano = {
   leer(img, op) {
     op = op || {};
     const cands = this.candidatos(); if (!cands.length) return Promise.resolve({ ok: false, motivo: 'sin_lista' });
-    const firma = S.prod.size + ':' + cands.length + ':' + (S.desde || '');
+    const firma = S.prod.size + ':' + cands.length + ':' + (S.desde || '') + ':' + S.buscarEn + ':' + (S.archivo || []).length;
     const id = ++this.n, msg = { id, gris: img.g, W: img.W, H: img.H, rot: op.rot || [0, 90, 270, 180], tiempoMax: op.tiempoMax || 0 };
     if (firma !== this.firma) { msg.cands = cands; msg.firma = firma; this.firma = firma; }
     return new Promise(res => {
@@ -567,30 +589,152 @@ const Mano = {
       if (S.tab !== 'escanear') { S.tab = 'escanear'; pintar(); } else pintarResultado();
       return true;
     }
-    if (manual) {
-      const leido = (r.lectura || '').replace(/\D/g, '');
-      hoja(`<h3>No pude leer el código escrito con seguridad</h3>
-        <p class="hint" style="margin-bottom:10px;">Solo acepto un código cuando coincide sin dudas con uno de la lista, para no confundir referencias.</p>
-        <ul class="refs" style="margin-bottom:12px;"><li>Acerca la etiqueta: que el número llene el recuadro y quede derecho.</li><li>Busca buena luz, sin sombra ni reflejo.</li><li>O tómale una foto quieta con el botón ${ico('imagen')}.</li></ul>
-        ${leido.length >= 6 ? `<p class="hint">Alcancé a ver algo como <span class="mono">${esc(leido)}</span> (puede tener errores).</p>` : ''}
-        <div class="fila" style="margin-top:12px;"><button class="btn" data-acc="mano">${ico('mano')} Intentar otra vez</button><button class="btn sec" data-acc="mano-buscar" data-q="${esc(leido.slice(0, 13))}">${ico('buscar')} Escribirlo en Buscar</button></div>`);
-    }
+    if (manual) { abrirLapiz({ lectura: (r.lectura || '').replace(/\D/g, ''), parecidos: parecidosUtiles(r), foto: this.foto(r.papel) }); return false; }
     return false;
   }
 };
+// Solo las referencias que se parecen de verdad a lo de la foto (buen puntaje y cerca de la mejor), máximo 3
+// (llr: cuánto mejor explica la foto ese código que números al azar; muy negativo = no se parece)
+function parecidosUtiles(r) { const ps = r.parecidos || []; if (!ps.length) return []; const top = ps[0].llr; return ps.filter(x => x.llr >= -8 && x.llr >= top - 8).slice(0, 3); }
 function tarjetaManuscrito(m) {
   const p = S.prod.get(m.id); if (!p) return '';
   const ref = String(p.ref_base || ''), s = m.s, resto = s.startsWith(ref) ? s.slice(ref.length) : '';
   return `<div class="res warn" role="status" aria-live="polite">
     <div class="res-banda">${ico('mano')} Leído a mano · confírmalo</div>
     <div class="res-cuerpo">
-      <p class="hint" style="margin-bottom:6px;">Compara número por número con lo escrito en la etiqueta:</p>
-      <div class="codigo-mano mono">${esc(resto ? ref : s)}${resto ? `<span>${esc(resto)}</span>` : ''}</div>
-      ${m.talla ? `<div class="nota-talla ok">Talla ${esc(m.talla)}</div>` : resto ? '<div class="nota-talla">La talla (últimos números) no se leyó con seguridad; la referencia sí.</div>' : ''}
+      <p class="hint" style="margin-bottom:6px;">Compara número por número con lo escrito en la etiqueta. <b>Si algún número quedó mal, corrígelo aquí:</b></p>
+      <form class="mano-edit" data-form="mano" autocomplete="off"><input class="inp mono codigo-mano-inp" id="mano-cod" inputmode="numeric" spellcheck="false" maxlength="20" value="${esc(s)}" aria-label="Código escrito a mano (se puede corregir)"></form>
+      <div id="mano-prod">${m.talla ? `<div class="nota-talla ok">Talla ${esc(m.talla)}</div>` : resto ? '<div class="nota-talla">La talla (últimos números) no se leyó con seguridad; la referencia sí.</div>' : ''}
       <div class="res-marca">${esc(p.marca || p.hoja || '')}</div>
-      <div class="res-desc">${esc(p.descripcion || 'Sin descripción')}</div>
+      <div class="res-desc">${esc(p.descripcion || 'Sin descripción')}</div></div>
       <div class="res-acc" style="margin-top:12px;"><button class="btn ok" data-acc="mano-ok">${ico('check')} Sí, es este</button><button class="btn sec" data-acc="mano-no">No es</button></div>
     </div></div>`;
+}
+
+/* ---------- Lápiz: completar o corregir el código escrito a mano ----------
+   Cuando el lector no está seguro (o los números no cupieron y siguen abajo), muestra la etiqueta, lo que alcanzó
+   a leer en un campo para completarlo y, mientras se escribe, las referencias que coinciden en el Excel escogido. */
+function universoCodigos() {                 // [{ s, s0, ref, talla, tipo, lista_id, p (activa) | arch (archivada) }]
+  const sc = S.buscarEn, U = [];
+  const add = (s, o) => { s = N.alnum(s); if (s.length >= 4) U.push(Object.assign({ s, s0: N.sinCeros(s) }, o)); };
+  for (const p of S.prod.values()) {
+    if (sc && p.lista_id !== sc) continue;
+    (p.codigos || []).forEach((c, i) => add(c, { ref: p.ref_base, talla: (p.tallas || [])[i] || '', tipo: 'codigo', lista_id: p.lista_id, p }));
+    add(p.ref_base, { ref: p.ref_base, talla: '', tipo: 'referencia', lista_id: p.lista_id, p });
+  }
+  (S.archivo || []).forEach(x => {
+    if (sc && x[3] !== sc) return;
+    (x[4] || []).forEach(c => add(c, { ref: x[0], talla: '', tipo: 'codigo', lista_id: x[3], arch: x }));
+    add(x[0], { ref: x[0], talla: '', tipo: 'referencia', lista_id: x[3], arch: x });
+  });
+  return U;
+}
+function distancia(a, b) {                    // Levenshtein (códigos cortos)
+  const m = a.length, n = b.length; let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
+  return prev[n];
+}
+// → grupos por referencia, el mejor primero: { ref, u (el código que mejor coincide), score, motivo, cods (todas sus tallas) }
+function sugerenciasCodigo(v, parecidos, U) {
+  U = U || universoCodigos();
+  const v0 = N.sinCeros(String(v || '').replace(/\D/g, '')), g = new Map();
+  const add = (u, score, motivo) => { const k = N.clave(u.ref); let x = g.get(k); if (!x) g.set(k, x = { k, ref: u.ref, score: -1 });
+    const prefiere = score > x.score || (score === x.score && x.u && x.u.arch && u.p);   // a igual coincidencia, la colección activa
+    if (prefiere) { x.score = score; x.u = u; x.motivo = motivo; } };
+  if (v0.length >= 3) for (const u of U) {
+    if (u.s0 === v0) add(u, 100, 'exacto');
+    else if (u.tipo === 'referencia' && v0.length > u.s0.length && v0.length - u.s0.length <= 3 && v0.startsWith(u.s0)) add(u, 88, 'ref');
+    else if (u.s0.startsWith(v0)) add(u, 70 + Math.min(v0.length, 20), 'empieza');
+    else if (v0.length >= 6 && u.s0.includes(v0)) add(u, 45, 'contiene');
+    else if (v0.length >= 9 && Math.abs(u.s0.length - v0.length) <= 3 && distancia(u.s0, v0) <= Math.floor(v0.length / 5)) add(u, 35, 'parecido');
+  }
+  (parecidos || []).forEach((x, i) => {                 // lo que vio el lector; si esa referencia está en una colección activa, esa
+    const k = N.clave(x.ref), x0 = N.sinCeros(x.s), mismos = U.filter(y => N.clave(y.ref) === k);
+    const u = mismos.find(y => y.p && y.s0 === x0) || mismos.find(y => y.p && y.tipo === 'referencia') || mismos.find(y => y.s0 === x0) || mismos[0];
+    if (u) add(u, 60 - 4 * i, 'foto');
+  });
+  const out = [...g.values()].sort((a, b) => b.score - a.score).slice(0, 6);
+  out.forEach(x => {                          // todas las tallas de esa referencia (para escoger la que dice la etiqueta)
+    const vistos = new Set();                 // primero los de colecciones activas (traen la talla)
+    x.cods = U.filter(u => u.tipo === 'codigo' && N.clave(u.ref) === x.k).sort((a, b) => !!b.p - !!a.p).filter(u => !vistos.has(u.s0) && vistos.add(u.s0));
+  });
+  return out;
+}
+function codigoResaltado(s, v) {              // los números que cambian respecto a lo escrito, marcados
+  const s0 = N.sinCeros(s), v0 = N.sinCeros(String(v || '').replace(/\D/g, '')), pre = s.slice(0, s.length - s0.length);
+  let h = esc(pre);
+  for (let i = 0; i < s0.length; i++) h += i >= v0.length ? `<span class="lz-nuevo">${esc(s0[i])}</span>` : v0[i] !== s0[i] ? `<mark>${esc(s0[i])}</mark>` : esc(s0[i]);
+  return h;
+}
+function sugerenciasHtml(v, lista, vacio) {
+  if (!lista.length) return vacio || '';
+  const MOT = { exacto: 'igual', ref: 'la referencia', empieza: 'empieza igual', contiene: 'contiene esos números', parecido: 'casi igual: revisa los marcados', foto: 'se parece a lo de la foto' };
+  return `<div class="lz-lista">${lista.map(x => {
+    const u = x.u, p = u.p, arch = u.arch, l = infoLista(u.lista_id);
+    const otra = !p && [...S.prod.values()].find(q => N.clave(q.ref_base) === x.k);      // la descripción, de donde esté
+    const titulo = p ? (p.descripcion || 'Ref. ' + p.ref_base) : ((otra && otra.descripcion) || (S.busq.datos && S.busq.datos.get(x.k) || {}).descripcion || 'Ref. ' + u.ref);
+    const lugar = `${esc(l.nombre || 'Excel')}${l.mes ? ' · ' + esc(mesCorto(l.mes)) : ''}${arch ? ' · archivada' : ''}`;
+    const datos = `data-s="${esc(u.s)}" data-ref="${esc(u.ref)}" data-lista="${esc(u.lista_id || '')}"`;
+    const conTalla = u.tipo === 'codigo' && x.motivo === 'exacto';
+    const tallas = !conTalla && x.cods.length > 1 ? `<div class="lz-tallas"><span>¿Qué números tiene al final?</span>${x.cods.slice(0, 12).map(c => `<button class="chip peq" data-acc="lapiz-elegir" data-s="${esc(c.s)}" data-ref="${esc(c.ref)}" data-lista="${esc(c.lista_id || '')}">…${esc(c.s.slice(-2))}${c.talla ? ' · T' + esc(c.talla) : ''}</button>`).join('')}</div>` : '';
+    return `<div class="lz-item"><button class="item" data-acc="lapiz-elegir" ${datos}><span class="crece"><span class="t">${esc(titulo)}</span>
+      <span class="s mono lz-cod">${x.motivo === 'foto' ? esc(u.s) : codigoResaltado(u.s, v)}</span>
+      <span class="s">${u.talla ? 'Talla ' + esc(u.talla) + ' · ' : ''}${lugar} · ${esc(MOT[x.motivo] || '')}</span></span>${p ? pillEstado(p.estado) : arch ? pillEstado(arch[2]) : ''}</button>${tallas}</div>`;
+  }).join('')}</div>`;
+}
+function chipBuscarEn() {
+  const l = S.buscarEn ? infoLista(S.buscarEn) : null;
+  return `<button type="button" class="chip peq buscar-en${l ? ' on' : ''}" data-acc="buscar-en">${ico('capas')}<span>Buscar en</span><b>${l ? esc(l.nombre || 'Excel') + (l.mes ? ' · ' + esc(mesCorto(l.mes)) : '') + (l.activa ? '' : ' (archivada)') : 'Todos los Excel'}</b><span aria-hidden="true">▾</span></button>`;
+}
+function elegirBuscarEn() {
+  const act = listasActivas(), arch = S.listas.filter(l => !l.activa).sort((a, b) => String(b.mes).localeCompare(String(a.mes))).slice(0, 24);
+  const nArch = id => (S.archivo || []).filter(x => x[3] === id).length, nAct = id => [...S.prod.values()].filter(p => p.lista_id === id).length;
+  const op = (l, n, extra) => `<button data-acc="buscar-en-ok" data-id="${esc(l.id)}" aria-pressed="${S.buscarEn === l.id}"><b>${esc(l.nombre)} · ${esc(N.nombreMes(l.mes))}</b><span>${n} refs${extra}</span></button>`;
+  hoja(`<h3>¿En qué Excel busco?</h3><p class="hint">Buscar, el lector a mano y el lápiz solo comparan con el Excel que escojas.</p>
+    <div class="opciones col-ops">
+      <button data-acc="buscar-en-ok" data-id="" aria-pressed="${!S.buscarEn}"><b>Todos los Excel</b><span>Las colecciones activas y las archivadas de otros meses</span></button>
+      ${act.length ? '<div class="sec-t">Activas</div>' + act.map(l => op(l, nAct(l.id), '')).join('') : ''}
+      ${arch.length ? '<div class="sec-t">Archivadas</div>' + arch.map(l => op(l, nArch(l.id), ' · archivada')).join('') : ''}
+    </div>`);
+}
+function fijarBuscarEn(id) {
+  S.buscarEn = id && S.listas.some(l => l.id === id) ? id : '';
+  Mano.firma = '';                                            // el lector vuelve a recibir los códigos
+  $$('.ov').filter(o => o.querySelector('.col-ops [data-acc="buscar-en-ok"]')).forEach(o => o.remove());   // solo la lista de Excel
+  $$('.buscar-en').forEach(b => { b.outerHTML = chipBuscarEn(); });
+  if (S.lapiz && $('#lapiz-cod')) { S.lapiz.U = null; pintarLapizSug(); }
+  if (S.tab === 'buscar' && $('#sug')) { S.busq = { q: '', res: [], cargando: false }; pintarSugerencias(); }
+  toast(S.buscarEn ? `Buscando solo en ${nombreColMes(S.buscarEn)}` : 'Buscando en todos los Excel');
+}
+function abrirLapiz(m) {
+  $$('.ov').forEach(o => o.remove());
+  S.lapiz = Object.assign({ lectura: '', parecidos: [], foto: '' }, m, { U: null });
+  Cam.pausar(60000);
+  const ov = hoja(`<div class="lapiz"><h3>${ico('mano')} Completa el código</h3>
+    ${S.lapiz.foto ? `<img class="lapiz-foto" src="${S.lapiz.foto}" alt="La etiqueta que se leyó">` : ''}
+    <p class="hint">${S.lapiz.lectura ? 'Esto alcancé a leer (puede tener errores). <b>Corrígelo o complétalo</b> mirando la etiqueta; si hay números debajo, agrégalos al final.' : 'No alcancé a leer los números. Escríbelos mirando la etiqueta.'}</p>
+    <div class="fila" style="margin:8px 0;">${chipBuscarEn()}</div>
+    <form class="mano-edit lapiz-f" data-form="lapiz" autocomplete="off"><span class="lapiz-ico" aria-hidden="true">${ico('mano')}</span><input class="inp mono codigo-mano-inp" id="lapiz-cod" inputmode="numeric" spellcheck="false" maxlength="22" value="${esc(S.lapiz.lectura)}" placeholder="Escribe el código" aria-label="Código escrito a mano: complétalo o corrígelo"></form>
+    <div id="lapiz-sug" aria-live="polite"></div>
+    <div class="fila" style="margin-top:12px;"><button class="btn sec" data-acc="mano">${ico('mano')} Leer otra vez</button><button class="btn sec" data-acc="lapiz-cerrar">Cerrar</button></div></div>`);
+  ov.addEventListener('click', e => { if (e.target === ov) { S.lapiz = null; Cam.pausar(800); } });
+  pintarLapizSug();
+  setTimeout(() => { const i = $('#lapiz-cod'); if (i && !matchMedia('(pointer:coarse)').matches) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 80);
+}
+function pintarLapizSug() {
+  const d = $('#lapiz-sug'), i = $('#lapiz-cod'), m = S.lapiz; if (!d || !i || !m) return;
+  if (!m.U) m.U = universoCodigos();
+  const v = i.value.replace(/\D/g, ''), sinTocar = v === m.lectura;
+  const lista = sugerenciasCodigo(v, sinTocar ? m.parecidos : null, m.U);
+  const donde = S.buscarEn ? nombreColMes(S.buscarEn) : 'ningún Excel';
+  d.innerHTML = sugerenciasHtml(v, lista, `<div class="vacio">${v.length < 3 ? 'Escribe los números de la etiqueta.' : `Con esos números no está en ${esc(donde)}.`}${S.buscarEn && v.length >= 3 ? ' <button class="chip peq" data-acc="buscar-en-ok" data-id="">Buscar en todos los Excel</button>' : ''}</div>`);
+}
+function elegirDelLapiz(el) {
+  const s = el.dataset.s, lista = el.dataset.lista, ref = el.dataset.ref;
+  $$('.ov').forEach(o => o.remove()); S.lapiz = null; S.resultadoMano = null;
+  if (N.buscar(S.ix, s, false).tipo !== 'ninguno') {          // está en una colección activa: la tarjeta de siempre
+    S.ultimo = { c: '', t: 0 }; Cam.pausar(0); alDetectar(s, 'mano'); if (S.resultado && lista && S.resultado.resultados && S.resultado.resultados.some(x => x.p.lista_id === lista) && S.resultado.p && S.resultado.p.lista_id !== lista && !S.resultado.otraCol) { S.resultado.elegida = lista; resolverEscaneo(S.resultado); pintarResultado(); } }
+  else abrirFichaRef(ref);
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -666,7 +810,9 @@ async function manoDeFoto(file) {
   const url = URL.createObjectURL(file);
   try { const img = new Image(); img.src = url; await img.decode();
     const r = await Mano.leer(Mano.gris(img, img.naturalWidth, img.naturalHeight, 1600), { rot: [0, 90, 270, 180] });
-    return r.ok && r.mejor && S.prod.get(r.mejor.id) ? { s: r.mejor.s, id: r.mejor.id, tipo: r.mejor.tipo, talla: r.tallaSegura ? r.mejor.talla : '', lectura: r.lectura } : null;
+    if (r.ok && r.mejor && S.prod.get(r.mejor.id)) return { s: r.mejor.s, id: r.mejor.id, tipo: r.mejor.tipo, talla: r.tallaSegura ? r.mejor.talla : '', lectura: r.lectura };
+    const leido = (r.lectura || '').replace(/\D/g, '');
+    return leido.length >= 4 || (r.parecidos || []).length ? { lapiz: { lectura: leido, parecidos: parecidosUtiles(r), foto: Mano.foto(r.papel) } } : null;
   } catch (e) { return null; } finally { URL.revokeObjectURL(url); }
 }
 function pedirFotos() { const i = $('#foto-in'); if (!i) return; i.value = ''; i.click(); }
@@ -675,12 +821,13 @@ async function leerFotos(files) {
   if (!files.length) return;
   Cam.pausar(4000);
   toast(files.length > 1 ? `Leyendo ${files.length} fotos…` : 'Leyendo la foto…', 15000);
-  const res = []; S._manoFotos = [];
+  const res = []; S._manoFotos = []; S._lapices = [];
   for (const f of files) {
     let cods = [], dudoso = false;
     try { const r = await codigosDeImagen(f); cods = r.codigos; dudoso = r.dudoso; } catch (e) {}
     if (!cods.length) {
       const m = await manoDeFoto(f);
+      if (m && m.lapiz) { S._lapices.push(m.lapiz); res.push({ nombre: f.name, codigo: null, lapiz: S._lapices.length - 1, lectura: m.lapiz.lectura }); continue; }
       if (m) { S._manoFotos.push(m); res.push({ nombre: f.name, codigo: m.s, mano: S._manoFotos.length - 1, idMano: m.id }); continue; }
       res.push({ nombre: f.name, codigo: null, dudoso }); continue;
     }
@@ -688,6 +835,7 @@ async function leerFotos(files) {
   }
   $$('.toast').forEach(t => t.remove());
   if (files.length === 1 && res[0].mano != null) { S.resultadoMano = S._manoFotos[res[0].mano]; S.tab = 'escanear'; pintar(); return; }
+  if (files.length === 1 && res[0].lapiz != null) { abrirLapiz(S._lapices[res[0].lapiz]); return; }
   if (files.length === 1) {
     if (!res[0].codigo) toast(res[0].dudoso ? 'La foto no es lo bastante nítida para leer el código con seguridad. Tómala otra vez con el celular quieto y el código derecho.' : 'No encontré un código de barras ni un Cod ref escrito que coincida con seguridad. Búscalo en Buscar.', 6500);
     return;
@@ -695,6 +843,7 @@ async function leerFotos(files) {
   const ok = res.filter(x => x.id).length, sin = res.filter(x => !x.codigo).length;
   hoja(`<h3>Resultado de ${files.length} fotos</h3><p class="hint" style="margin-bottom:10px;">${ok} en la lista · ${res.filter(x => x.codigo && !x.id).length} no están${sin ? ` · ${sin} sin código legible` : ''}</p>
     <div class="items">${res.map(x => {
+      if (x.lapiz != null) return `<button class="item" data-acc="lapiz-ver" data-i="${x.lapiz}"><span class="marcador warn"></span><span class="crece"><span class="t">${ico('mano')} Escrito a mano: complétalo</span><span class="s">${x.lectura ? `Leí <span class="mono">${esc(x.lectura)}</span> · ` : ''}${esc(x.nombre || '')}</span></span></button>`;
       if (x.mano != null) { const pm = S.prod.get(x.idMano); return `<button class="item" data-acc="mano-ver" data-i="${x.mano}"><span class="marcador warn"></span><span class="crece"><span class="t">${esc(pm ? pm.descripcion || pm.ref_base : x.codigo)}</span><span class="s">Escrito a mano · <span class="mono">${esc(x.codigo)}</span> · toca para confirmar</span></span></button>`; }
       const p = x.id && S.prod.get(x.id);
       const cls = p ? (N.yaFotografiada(p) ? 'warn' : 'ok') : x.archivo ? 'warn' : x.codigo ? 'no' : '';
@@ -707,6 +856,89 @@ async function leerFotos(files) {
 /* ============================================================
    ESCANEO → RESULTADO
    ============================================================ */
+/* ---------- Colección de trabajo ----------
+   David elige en qué colección está trabajando (o "Todas"). Lo que escanee de otra colección activa sale en ámbar
+   con el nombre. Una referencia que está en varias colecciones activas se marca en todas (una sola foto sirve). */
+function colTrabajo() { return S.coleccion ? S.listas.find(l => l.id === S.coleccion && l.activa) || null : null; }
+const listasActivas = () => S.listas.filter(l => l.activa).sort((a, b) => String(b.mes).localeCompare(String(a.mes)) || String(a.nombre).localeCompare(String(b.nombre)));
+function nombreCol(id) {                 // "Dackel" · si hay dos activas con el mismo nombre: "Dackel · Nov 26"
+  const l = infoLista(id); if (!l.id) return 'otra colección';
+  const dup = S.listas.some(x => x.activa && x.id !== l.id && x.nombre === l.nombre);
+  return dup ? `${l.nombre} · ${mesCorto(l.mes)}` : l.nombre;
+}
+const nombreColMes = id => { const l = infoLista(id); return l.id ? `${l.nombre} · ${N.nombreMes(l.mes)}` : 'otra colección'; };
+function listaY(xs) { xs = [...new Set(xs)]; return xs.length < 2 ? (xs[0] || '') : xs.slice(0, -1).join(', ') + ' y ' + xs[xs.length - 1]; }
+// La misma referencia en las otras colecciones activas
+function hermanos(p) { const r = []; if (!p) return r; const k = N.clave(p.ref_base); for (const q of S.prod.values()) if (q.id !== p.id && q.activo !== false && N.clave(q.ref_base) === k) r.push(q); return r; }
+function fijarColeccion(id) {
+  const l = id ? S.listas.find(x => x.id === id && x.activa) : null;
+  S.coleccion = l ? l.id : ''; guardar('foto_coleccion', S.coleccion); S.filtros.lista = S.coleccion;
+  $$('.ov').forEach(o => o.remove());
+  if (S.resultado && S.resultado.resultados) { const r = S.resultado; r.forzada = null; r.elegida = null; resolverEscaneo(r); if (!r.otraCol) aceptarEscaneo(r); actualizarReciente(r); }
+  pintarColSel(); toast(l ? `Trabajando en ${l.nombre} · ${N.nombreMes(l.mes)}` : 'Trabajando en todas las colecciones');
+  if (S.tab === 'pendientes') pintarVista(); else repintarSuave();
+}
+function elegirColeccion() {
+  const col = colTrabajo(), act = listasActivas(), todos = [...S.prod.values()];
+  hoja(`<h3>¿En qué colección trabajas?</h3>
+    <p class="hint">Lo que escanees de otra colección sale en ámbar con su nombre. Si una referencia está en varias colecciones, al marcar un paso se marca en todas.</p>
+    <div class="opciones col-ops">
+      <button data-acc="col-ok" data-id="" aria-pressed="${!col}"><b>Todas las colecciones</b><span>${act.length} activas · si algo está en varias, te dejo escoger cuál ver</span></button>
+      ${act.map(l => { const c = contar(todos.filter(p => p.lista_id === l.id)); return `<button data-acc="col-ok" data-id="${esc(l.id)}" aria-pressed="${!!col && col.id === l.id}"><b>${esc(l.nombre)} · ${esc(N.nombreMes(l.mes))}</b><span>${c.total} refs · ${c.sin_foto} sin foto · ${c.en_drive} en el drive${puedeMarcarLista(l.id) ? '' : ' · solo consulta'}</span></button>`; }).join('')}
+    </div>`);
+}
+function pintarColSel() {
+  const d = $('#top-col'); if (!d) return;
+  const act = listasActivas(), col = colTrabajo();
+  if (act.length < 2) { d.innerHTML = ''; d.classList.add('hidden'); return; }
+  d.classList.remove('hidden');
+  d.innerHTML = `<button class="col-sel" data-acc="coleccion" aria-label="Colección de trabajo: ${esc(col ? col.nombre : 'todas')}. Cambiar">${ico('capas')}<span class="col-l">Colección</span>
+    <b>${col ? esc(col.nombre) + ' <span class="col-m">· ' + esc(mesCorto(col.mes)) + '</span>' : `Todas <span class="col-m">· ${act.length} activas</span>`}</b><span class="col-f" aria-hidden="true">▾</span></button>`;
+}
+
+// Decide qué referencia mostrar según la colección de trabajo
+function resolverEscaneo(r) {
+  const mes = id => String(infoLista(id).mes || '');
+  const res = (r.resultados || []).slice()            // primero lo que esta persona puede marcar, luego lo más reciente
+    .sort((x, y) => (puedeMarcar(y.p) - puedeMarcar(x.p)) || mes(y.p.lista_id).localeCompare(mes(x.p.lista_id)));
+  const col = colTrabajo();
+  r.otraCol = null; r.opciones = null; r.p = null; r.talla = '';
+  if (!res.length) return r;
+  const fija = r.forzada || (col && col.id) || '';
+  const base = fija ? res.filter(x => x.p.lista_id === fija) : res;
+  if (!base.length) {                               // no está en la colección de trabajo, sí en otra activa
+    const ls = [...new Set(res.map(x => x.p.lista_id))];
+    r.otraCol = ls.map(id => res.find(x => x.p.lista_id === id));
+    r.p = r.otraCol[0].p; r.talla = r.otraCol[0].talla;
+    return r;
+  }
+  const x = (r.elegida && base.find(y => y.p.lista_id === r.elegida)) || base[0];
+  r.p = x.p; r.talla = x.talla;
+  const ls = [...new Set(base.map(y => y.p.lista_id))];
+  if (!fija && ls.length > 1) r.opciones = ls;
+  return r;
+}
+function actualizarReciente(r) {
+  const x = S.recientes.find(y => y.cuando === r.cuando && y.codigo === r.codigo); if (!x) return;
+  x.id = r.p && r.p.id; x.otra = r.otraCol && r.p ? r.p.lista_id : '';
+}
+// Escaneo aceptado: queda en el historial y la referencia pasa a "Localizada" (en todas sus colecciones)
+function aceptarEscaneo(r) {
+  if (!r || !r.p || r.aceptado) return;
+  r.aceptado = true;
+  if (puedeMarcar(r.p)) {
+    encolar('foto_escanear', { p_codigo: r.codigo, p_producto: r.p.id });
+    let cambio = false;
+    [r.p, ...hermanos(r.p).filter(puedeMarcar)].forEach((q, i) => {
+      if (q.estado !== 'pendiente') return;
+      q.estado = 'localizado'; q.estado_por = S.actor && S.actor.nombre; q.estado_en = ahoraIso(); cambio = true;
+      if (i) encolar('foto_marcar', { p_producto: q.id, p_estado: 'localizado' });
+    });
+    if (cambio) { reconstruirIndice(); guardarCache(); }
+  }
+  if (S.sesionOn && puedeMarcar(r.p) && !S.sesion.includes(r.p.id)) { S.sesion.push(r.p.id); guardarSesion(); }
+}
+
 function alDetectar(codigo, origen) {
   const c = N.limpiar(codigo);
   if (c.length < 4) return;
@@ -715,60 +947,139 @@ function alDetectar(codigo, origen) {
   S.ultimo = { c, t: Date.now() };
   Cam.pausar(1100);
   const b = N.buscar(S.ix, c, origen === 'manual');
-  const r = { codigo: c, tipo: b.tipo, sufijo: b.sufijo, resultados: b.resultados, origen, cuando: ahoraIso() };
-  r.p = b.resultados[0] ? b.resultados[0].p : null;
-  r.talla = b.resultados[0] ? b.resultados[0].talla : '';
-  if (r.p) {
-    const ya = N.yaFotografiada(r.p);
-    r.ya = ya;
-    ya ? Sonido.ya() : Sonido.si();
-    if (puedeMarcar(r.p)) {                          // solo el jefe o el encargado dejan rastro y marcan "Localizada"
-      encolar('foto_escanear', { p_codigo: c, p_producto: r.p.id });
-      if (r.p.estado === 'pendiente') { r.p.estado = 'localizado'; r.p.estado_por = S.actor && S.actor.nombre; r.p.estado_en = ahoraIso(); reconstruirIndice(); }
-    }
+  const r = resolverEscaneo({ codigo: c, tipo: b.tipo, sufijo: b.sufijo, resultados: b.resultados, origen, cuando: ahoraIso() });
+  if (r.p && r.otraCol) {
+    Sonido.ya();                                     // ámbar: es de otra colección; no se marca hasta que David lo diga
+  } else if (r.p) {
+    r.ya = N.yaFotografiada(r.p);
+    r.ya ? Sonido.ya() : Sonido.si();
+    aceptarEscaneo(r);
   } else {
     r.archivo = buscarArchivo(c, origen === 'manual');
     r.archivo ? Sonido.ya() : Sonido.no();
     if (puedeMarcarAlgo()) encolar('foto_escanear', { p_codigo: c, p_producto: null });
   }
-  if (r.p && S.sesionOn && puedeMarcar(r.p) && !S.sesion.includes(r.p.id)) { S.sesion.push(r.p.id); guardarSesion(); }
   S.resultado = r;
-  S.recientes.unshift({ codigo: c, tipo: r.tipo, id: r.p && r.p.id, archivo: !!r.archivo, cuando: r.cuando });
+  S.recientes.unshift({ codigo: c, tipo: r.tipo, id: r.p && r.p.id, otra: r.otraCol ? r.p.lista_id : '', archivo: !!r.archivo, cuando: r.cuando });
   S.recientes = S.recientes.slice(0, 25);
   if (S.tab !== 'escanear' && origen !== 'manual') { S.tab = 'escanear'; pintar(); }
   else if (S.tab === 'escanear') { pintarResultado(); pintarRecientes(); pintarEstadoLista(); pintarSesion(); const cam = $('.cam'); if (cam) { cam.classList.remove('leyo'); void cam.offsetWidth; cam.classList.add('leyo'); } }
 }
 
+// Marcar un paso. Si la referencia está en otras colecciones activas, se marca también allá:
+// hacia adelante, las que van más atrás lo alcanzan; si es una corrección hacia atrás, solo las que iban igual.
 function marcar(p, estado) {
   if (!p || p.estado === estado) return;
   if (!puedeMarcar(p)) return toast('Solo consulta: los pasos los marca el encargado de fotografía.', 4000);
-  p.estado = estado; p.estado_por = S.actor && S.actor.nombre; p.estado_en = ahoraIso();
-  S.prod.set(p.id, p); reconstruirIndice(); guardarCache();
-  encolar('foto_marcar', { p_producto: p.id, p_estado: estado });
-  toast(`${N.etiquetaEstado(estado)} ✓`);
-  aHoja([p]);
+  const antes = p.estado, adelante = N.ORDEN[estado] > N.ORDEN[antes];
+  const hs = hermanos(p).filter(q => puedeMarcar(q) && q.estado !== estado && (adelante ? N.ORDEN[q.estado] < N.ORDEN[estado] : q.estado === antes));
+  const todos = [p, ...hs], quien = S.actor && S.actor.nombre, cuando = ahoraIso();
+  todos.forEach(q => { q.estado = estado; q.estado_por = quien; q.estado_en = cuando; S.prod.set(q.id, q); encolar('foto_marcar', { p_producto: q.id, p_estado: estado }); });
+  if (adelante && N.ORDEN[estado] >= N.ORDEN.fotografiado)              // donde solo consultas, la foto se copia sola (lo hace el servidor)
+    hermanos(p).filter(q => !puedeMarcar(q) && N.ORDEN[q.estado] < N.ORDEN[estado]).forEach(q => { const l = infoLista(p.lista_id); q.estado = estado; q.estado_por = (estado === 'subido' ? 'Subida en página · ' : 'Foto de ') + (l.nombre || '') + ' · ' + mesCorto(l.mes); q.estado_en = cuando; });
+  reconstruirIndice(); guardarCache();
+  const nombres = todos.map(q => nombreCol(q.lista_id));
+  S.ultMarca = todos.length > 1 ? { ref: p.ref_base, estado, nombres, t: Date.now() } : null;
+  toast(`${N.etiquetaEstado(estado)} ✓${todos.length > 1 ? ' · en ' + listaY(nombres) : ''}`, todos.length > 1 ? 3200 : undefined);
+  aHoja(todos);
   repintarSuave();
 }
 
 function nombreLista(id) { const l = S.listas.find(x => x.id === id); return l ? l.nombre : ''; }
 
+/* ---------- En todos los Excel: cada referencia en todas las colecciones (activas y archivadas) ----------
+   Lo de las colecciones activas está en el teléfono; lo archivado llega resumido y el servidor completa
+   quién y cuándo (foto_buscar). */
+const infoLista = id => S.listas.find(l => l.id === id) || {};
+function mesCorto(m) { const t = String(m || ''), k = parseInt(t.slice(5, 7), 10); return k ? `${MES_CORTO[k - 1]} ${t.slice(2, 4)}` : ''; }
+function aparicionesDe(ref) {
+  const m = new Map(), k = N.clave(ref);
+  const srv = S.apar.get(k); if (srv) srv.items.forEach(a => m.set(a.lista_id, Object.assign({}, a)));
+  (S.archivo || []).forEach(x => { if (N.clave(x[0]) === k && !m.has(x[3])) m.set(x[3], { lista_id: x[3], estado: x[2] }); });
+  for (const p of S.prod.values()) if (N.clave(p.ref_base) === k)            // lo del teléfono manda (puede tener cambios sin enviar)
+    m.set(p.lista_id, Object.assign(m.get(p.lista_id) || {}, { lista_id: p.lista_id, producto_id: p.id, estado: p.estado, estado_por: p.estado_por, estado_en: p.estado_en }));
+  return [...m.values()].map(a => { const l = infoLista(a.lista_id); return Object.assign(a, { nombre: l.nombre || a.nombre || 'Colección', mes: l.mes || a.mes || '', activa: l.id ? !!l.activa : !!a.activa }); })
+    .sort((x, y) => String(y.mes).localeCompare(String(x.mes)) || (y.activa - x.activa));
+}
+function aparicionesHtml(ref, actual) {
+  const ap = aparicionesDe(ref);
+  const vacio = `<div class="apar" data-ref="${esc(ref)}" data-actual="${esc(actual || '')}"></div>`;
+  if (!ap.length || (ap.length === 1 && ap[0].lista_id === actual)) return vacio;
+  return `<div class="apar" data-ref="${esc(ref)}" data-actual="${esc(actual || '')}"><div class="apar-t">En todos los Excel · ${ap.length}</div>${ap.map(a => `<div class="apar-f ${a.lista_id === actual ? 'esta' : ''}">
+      <span class="crece"><b>${esc(N.nombreMes(a.mes))} · ${esc(a.nombre)}</b><span>${a.lista_id === actual ? 'este Excel' : a.activa ? 'activa' : 'archivada'}${a.estado_por ? ' · ' + esc(a.estado_por) : ''}${a.estado_en ? ', ' + esc(haceCuanto(a.estado_en)) : ''}</span></span>${pillEstado(a.estado)}</div>`).join('')}</div>`;
+}
+function repintarApariciones(ref) { $$('.apar').forEach(el => { if (N.clave(el.dataset.ref) === N.clave(ref)) el.outerHTML = aparicionesHtml(ref, el.dataset.actual); }); }
+async function traerApariciones(ref) {
+  if (!ref) return;
+  const k = N.clave(ref);
+  const c = S.apar.get(k); if (c && Date.now() - c.ts < 120000) return;
+  S.apar.set(k, { ts: Date.now(), items: c ? c.items : [] });                      // evita pedirla dos veces seguidas
+  const r = S.demo ? Demo.buscar(null, ref) : await rpc('foto_buscar', { p_token: tok(), p_q: null, p_ref: ref });
+  if (!r || !r.ok) { if (!c) S.apar.delete(k); return; }
+  const fila = (r.resultados || [])[0];
+  S.apar.set(k, { ts: Date.now(), items: fila ? fila.apariciones || [] : [] });
+  repintarApariciones(ref);
+}
+const pedirApariciones = ref => setTimeout(() => traerApariciones(ref), 0);
+function abrirFichaRef(ref) {
+  const g = (S.busq.datos && S.busq.datos.get(N.clave(ref))) || {};
+  const ar = (S.archivo || []).find(x => N.clave(x[0]) === N.clave(ref));
+  hoja(`<div class="res warn" role="status"><div class="res-banda">${ico('alerta')} No está en las colecciones activas</div><div class="res-cuerpo">
+      <div class="res-marca">${esc(g.marca || g.hoja || '')}</div><div class="res-desc">${esc(g.descripcion || 'Ref. ' + ref)}</div>
+      <dl class="datos"><dt>Ref. base</dt><dd class="mono">${esc(ref)}</dd>${(g.serial || (ar && ar[1])) ? `<dt>Serial</dt><dd class="mono">${esc(g.serial || ar[1])}</dd>` : ''}${(g.tallas || []).filter(Boolean).length ? `<dt>Tallas</dt><dd>${esc(g.tallas.filter(Boolean).join(', '))}</dd>` : ''}</dl>
+      ${aparicionesHtml(ref, null)}</div></div>`);
+  pedirApariciones(ref);
+}
 function tarjetaArchivo(r) {
   const a = r.archivo, l = S.listas.find(x => x.id === a.lista_id) || {}, subida = a.estado === 'subido';
   return `<div class="res warn" role="status" aria-live="polite">
     <div class="res-banda">${ico('alerta')} ${subida ? 'Subida en página · otra colección' : 'Está en otra colección'}</div>
     <div class="res-cuerpo"><p>No está en las colecciones activas. ${subida ? 'Ya se subió a la página en' : 'Aparece en'} <b>${esc(l.nombre || 'otra colección')}${l.mes ? ' · ' + esc(N.nombreMes(l.mes)) : ''}</b> — ${esc(N.etiquetaEstado(a.estado))}.</p>
-    <dl class="datos" style="margin-top:10px;"><dt>Escaneado</dt><dd class="mono">${esc(r.codigo)}</dd><dt>Ref. base</dt><dd class="mono">${esc(a.ref)}</dd>${a.serial ? `<dt>Serial</dt><dd class="mono">${esc(a.serial)}</dd>` : ''}</dl></div></div>`;
+    <dl class="datos" style="margin-top:10px;"><dt>Escaneado</dt><dd class="mono">${esc(r.codigo)}</dd><dt>Ref. base</dt><dd class="mono">${esc(a.ref)}</dd>${a.serial ? `<dt>Serial</dt><dd class="mono">${esc(a.serial)}</dd>` : ''}</dl>${aparicionesHtml(a.ref, null)}${pedirApariciones(a.ref) && ''}</div></div>`;
 }
 function notaColeccion(p) {
   let h = '';
-  if (p.otra) h += p.otra.estado === 'subido'
+  const otraActiva = p.otra && S.listas.some(l => l.id === p.otra.lista_id && l.activa);
+  if (p.otra && !otraActiva) h += p.otra.estado === 'subido'
     ? `<div class="nota-talla">Subida en página en la colección <b>${esc(p.otra.nombre)} · ${esc(N.nombreMes(p.otra.mes))}</b>.</div>`
     : `<div class="nota-talla">También está en la colección <b>${esc(p.otra.nombre)} · ${esc(N.nombreMes(p.otra.mes))}</b> (${esc(N.etiquetaEstado(p.otra.estado).toLowerCase())}).</div>`;
   if (p.arrastrado_de) h += `<div class="nota-talla ok">Viene de ${esc(nombreListaMes(p.arrastrado_de))} (quedó pendiente ese mes).</div>`;
   return h;
 }
+// La referencia está en varias colecciones activas: lo que se marque se marca en todas
+function notaVarias(p) {
+  const hs = hermanos(p); if (!hs.length) return '';
+  const um = S.ultMarca;
+  if (um && um.ref === p.ref_base && p.estado === um.estado && Date.now() - um.t < 120000)
+    return `<div class="nota-talla ok varias">${ico('check')}<span>Se marcó en <b>${esc(listaY(um.nombres))}</b> · ${esc(N.etiquetaEstado(um.estado))}.</span></div>`;
+  if (!puedeMarcar(p)) return '';
+  const si = hs.filter(puedeMarcar), no = hs.filter(q => !puedeMarcar(q));
+  return `<div class="nota-talla ok varias">${ico('capas')}<span>Está en ${hs.length + 1} colecciones activas.${si.length ? ` Lo que marques aquí se marca también en <b>${esc(listaY(si.map(q => nombreCol(q.lista_id))))}</b>.` : ''}${no.length ? ` En ${esc(listaY(no.map(q => nombreCol(q.lista_id))))} no marcas tú, pero la foto se copia sola.` : ''}</span></div>`;
+}
+// Escaneaste algo que no es de tu colección de trabajo
+function tarjetaOtraCol(r) {
+  const p = r.p, col = colTrabajo();
+  return `<div class="res warn" role="status" aria-live="polite">
+    <div class="res-banda">${ico('alerta')} Está en otra colección</div>
+    <div class="res-cuerpo">
+      <div class="res-marca">${esc(p.marca || p.hoja || '')}</div>
+      <div class="res-desc">${esc(p.descripcion || 'Sin descripción')}</div>
+      <p class="otra-p">No está en <b>${esc(col ? nombreColMes(col.id) : 'tu colección')}</b>. Está en:</p>
+      <div class="otra-cols">${r.otraCol.map(x => { const q = x.p, l = infoLista(q.lista_id); return `<div class="otra-c">
+        <div class="fila entre"><span class="crece"><b>${esc(nombreColMes(q.lista_id))}</b><span>${esc(q.hoja || q.marca || '')}${x.talla ? ' · talla ' + esc(x.talla) : ''}${puedeMarcar(q) ? '' : ' · solo consulta'}</span></span>${pillEstado(q.estado)}</div>
+        <div class="res-acc"><button class="btn sec" data-acc="col-alla" data-id="${esc(q.lista_id)}">${puedeMarcar(q) ? ico('check') + ' Marcar allá' : 'Ver allá'}</button><button class="btn sec" data-acc="col-ok" data-id="${esc(l.id || '')}">Cambiar a ${esc(l.nombre || 'esa')}</button></div></div>`; }).join('')}</div>
+      <dl class="datos" style="margin-top:12px;"><dt>Escaneado</dt><dd class="mono">${esc(r.codigo)}</dd><dt>Ref. base</dt><dd class="mono">${esc(p.ref_base)}</dd>${p.serial ? `<dt>Serial</dt><dd class="mono">${esc(p.serial)}</dd>` : ''}</dl>
+    </div></div>`;
+}
+// En "Todas" y la referencia está en varias: escoger cuál ver (marcar igual se marca en todas)
+function elegirCualHtml(r) {
+  if (!r.opciones || r.opciones.length < 2) return '';
+  return `<div class="cual" role="group" aria-label="¿De qué colección?"><span>Está en ${r.opciones.length} colecciones · ¿cuál ves?</span>
+    <div class="cual-b">${r.opciones.map(id => `<button class="chip peq" data-acc="res-cual" data-id="${esc(id)}" aria-pressed="${r.p.lista_id === id}">${esc(nombreCol(id))} · ${esc(mesCorto(infoLista(id).mes))}</button>`).join('')}</div></div>`;
+}
 function tarjetaProducto(r) {
   const p = r.p;
+  if (p && r.otraCol) return tarjetaOtraCol(r);
   if (!p && r.archivo) return tarjetaArchivo(r);
   if (!p) {
     return `<div class="res no" role="alert" aria-live="assertive">
@@ -787,19 +1098,22 @@ function tarjetaProducto(r) {
   else if (r.tipo === 'serial') nota = `<div class="nota-talla ok">Encontrada por serial</div>`;
   else if (r.tipo === 'referencia') nota = `<div class="nota-talla ok">Encontrada por referencia base</div>`;
   if (r.origen === 'mano') nota += `<div class="nota-talla ok">Código escrito a mano · confirmado por ti</div>`;
+  if (r.forzada) nota += `<div class="nota-talla">De <b>${esc(nombreColMes(p.lista_id))}</b> · no es tu colección de trabajo.</div>`;
+  if (/^Foto de /.test(p.estado_por || '')) nota += `<div class="nota-talla ok">Ya tiene foto en otro Excel: <b>${esc(String(p.estado_por).slice(8))}</b>. Una foto sirve para los dos.</div>`;
   const tallas = (p.tallas || []).filter(Boolean);
   const tallasHtml = tallas.length ? `<div class="tallas">${tallas.map(t => `<span class="${r.talla && t === r.talla ? 'esta' : ''}">${esc(t)}</span>`).join('')}</div>` : '—';
   const bods = (p.bodegas || []).slice().sort((a, b) => (N.esTransito(a.b) - N.esTransito(b.b)) || b.n - a.n);
   const bodsHtml = bods.length ? `<div class="bods">${bods.map(x => `<span class="${S.sede && x.b === S.sede ? 'aqui' : ''} ${N.esTransito(x.b) ? 'tran' : ''}">${esc(N.nombreSede(x.b))} · ${x.n}</span>`).join('')}</div>` : '—';
   const extra = Object.entries(p.extra || {});
-  const otras = (r.resultados || []).slice(1).map(x => x.p).filter(x => x.lista_id !== p.lista_id || x.id !== p.id);
+  const otras = (r.resultados || []).slice(1).map(x => x.p).filter(x => N.clave(x.ref_base) !== N.clave(p.ref_base));   // otras referencias con el mismo código
+  pedirApariciones(p.ref_base);
   const sig = siguientePaso(p.estado);
   return `<div class="res ${clase}" role="status" aria-live="polite">
     <div class="res-banda">${banda}</div>
     <div class="res-cuerpo">
       <div class="res-marca">${esc(p.marca || p.hoja || '')}</div>
       <div class="res-desc">${esc(p.descripcion || 'Sin descripción')}</div>
-      ${nota}${notaColeccion(p)}${notaExcel(p)}
+      ${elegirCualHtml(r)}${nota}${notaColeccion(p)}${notaExcel(p)}${notaVarias(p)}
       <dl class="datos">
         <dt>Escaneado</dt><dd class="mono">${esc(r.codigo || '—')}</dd>
         ${p.hoja && p.hoja !== p.marca ? `<dt>Hoja</dt><dd>${esc(p.hoja)}</dd>` : ''}
@@ -822,7 +1136,8 @@ function tarjetaProducto(r) {
       }).join('')}</div>
       <div class="consulta">${ico('lock')} Solo consulta. ${(S.listas.find(l => l.id === p.lista_id) || {}).encargado ? `Los pasos los marca ${esc((S.listas.find(l => l.id === p.lista_id) || {}).encargado)}.` : 'Los pasos los marca el encargado de fotografía.'}</div>`}
       <div class="res-meta">${esc(nombreListaMes(p.lista_id))} · ${p.estado_por ? `último cambio: ${esc(p.estado_por)}, ${esc(haceCuanto(p.estado_en))}` : 'sin cambios todavía'}</div>
-      ${otras.length ? `<div class="otras">También aparece en: ${otras.map(o => esc(nombreLista(o.lista_id) + ' · ' + o.ref_base)).join(', ')}</div>` : ''}
+      ${aparicionesHtml(p.ref_base, p.lista_id)}
+      ${otras.length ? `<div class="otras">Este código también aparece en otra referencia: ${otras.map(o => esc(nombreLista(o.lista_id) + ' · ' + o.ref_base)).join(', ')}</div>` : ''}
     </div></div>`;
 }
 function siguientePaso(e) {
@@ -886,8 +1201,9 @@ function tablaHojasHtml(hs) {
     ${hs.map(h => fila(h.hoja, h)).join('') || '<tr><td colspan="7" class="hint">Sin datos</td></tr>'}${hs.length > 1 ? fila('Total', tot, true) : ''}</tbody></table>`;
 }
 function abrirHojas() {
-  const arr = [...S.prod.values()];
-  const ls = S.listas.filter(l => l.activa);
+  const col = colTrabajo();
+  const arr = [...S.prod.values()].filter(p => !col || p.lista_id === col.id);
+  const ls = col ? [col] : S.listas.filter(l => l.activa);
   hoja(`<h3>Por hoja del Excel</h3><p class="hint" style="margin-bottom:12px;">${esc(ls.length === 1 ? ls[0].nombre + ' · ' + N.nombreMes(ls[0].mes) : ls.length + ' colecciones activas')} · toca una hoja para ver sus referencias.</p>
     ${hojasHtml(hojasDe(arr), true)}`);
 }
@@ -901,8 +1217,8 @@ function pintarTop() {
       <button class="icon-btn" id="ind" data-acc="sync" title="Actualizar" aria-label="Actualizar">${ico('sync')}</button>
       <button class="icon-btn" data-acc="tema" aria-label="Cambiar tema">${tema() === 'dark' ? ico('sol') : ico('luna')}</button>
       ${S.modo === 'demo' ? '' : `<button class="icon-btn" data-acc="salir" aria-label="Salir">${ico('salir')}</button>`}
-    </div>`;
-  pintarIndicador();
+    </div><div class="top-col hidden" id="top-col"></div>`;
+  pintarIndicador(); pintarColSel();
 }
 function pintarIndicador() {
   const b = $('#ind'); if (!b) return;
@@ -946,6 +1262,7 @@ let _repintar = null;
 function repintarSuave() {          // vuelve a pintar sin tocar la cámara ni lo que se está escribiendo
   clearTimeout(_repintar);
   _repintar = setTimeout(() => {
+    pintarColSel();
     if (S.tab === 'escanear') { pintarResultado(); pintarEstadoLista(); pintarRecientes(); pintarSesion(); }
     else if (S.tab === 'buscar') pintarSugerencias();
     else if (S.tab === 'pendientes') pintarPendientes();
@@ -995,12 +1312,14 @@ function pintarEstadoLista() {
   const e = $('#estado-lista'); if (!e) return;
   const activas = S.listas.filter(l => l.activa);
   if (!activas.length) { e.innerHTML = `<span>No hay listas activas. ${S.modo === 'admin' ? 'Agrega una en Admin.' : 'Pídele al admin que conecte una.'}</span>`; return; }
-  const arr = [...S.prod.values()], c = contar(arr), nh = hojasDe(arr).length;
+  const col = colTrabajo();
+  const arr = [...S.prod.values()].filter(p => !col || p.lista_id === col.id), c = contar(arr), nh = hojasDe(arr).length;
   const avisos = [];
   if (esJefe() && S.actor && !S.demo && S.sqlV < 6) avisos.push('Falta correr el SQL nuevo (scanner-foto.sql) en Supabase: sin eso no se toman los pasos del Excel (por eso pueden salir “Sin foto”).');
+  else if (esJefe() && S.actor && !S.demo && S.sqlV < 7) avisos.push('Falta correr el SQL nuevo (scanner-foto.sql, v6.4) en Supabase: sin eso la foto que ya está en otro Excel no se copia aquí (por eso pueden salir “Sin foto”).');
   if (puedeMarcarAlgo()) activas.forEach(l => { const er = S.errSync[l.id]; if (er) avisos.push(`No pude leer el Excel de ${l.nombre}: ${er.msg} Toca ⟳ para reintentar.`); });
   const rol = esJefe() ? '' : puedeMarcarAlgo() ? `<span class="pill e-rol">Encargado de fotos</span>` : `<span class="pill">${ico('lock')} Solo consulta</span>`;
-  e.innerHTML = `<b style="color:var(--ink);font-weight:500;flex-basis:100%;display:flex;justify-content:space-between;gap:8px;align-items:center;">${esc(activas.length === 1 ? activas[0].nombre : activas.length + ' listas activas')}${rol}</b>
+  e.innerHTML = `<b style="color:var(--ink);font-weight:500;flex-basis:100%;display:flex;justify-content:space-between;gap:8px;align-items:center;">${esc(col ? nombreColMes(col.id) : activas.length === 1 ? activas[0].nombre : activas.length + ' colecciones activas')}${rol}</b>
     <span>${c.total} refs · <b>${c.sin_foto}</b> sin foto · <b>${c.en_drive}</b> en el drive</span>
     ${nh ? `<button class="chip peq" data-acc="hojas">Por hoja · ${nh}</button>` : ''}
     <div class="crece" style="flex-basis:100%;">${barraHtml(c)}</div>
@@ -1019,9 +1338,9 @@ function pintarRecientes() {
   if (!rs.length) { d.innerHTML = ''; return; }
   d.innerHTML = `<div class="sec-t">Escaneados recientes</div><div class="items recientes">${rs.map(x => {
     const p = x.id && S.prod.get(x.id);
-    const cls = !p ? (x.archivo ? 'warn' : 'no') : N.yaFotografiada(p) ? 'warn' : 'ok';
+    const cls = !p ? (x.archivo ? 'warn' : 'no') : x.otra || N.yaFotografiada(p) ? 'warn' : 'ok';
     return `<button class="item" ${p ? `data-acc="ver" data-id="${esc(p.id)}"` : ''}><span class="marcador ${cls}"></span><span class="crece">
-      <span class="t">${p ? esc(p.descripcion || p.ref_base) : x.archivo ? 'Está en otra colección' : 'No está en la lista'}</span><span class="s mono">${esc(x.codigo)} · ${esc(haceCuanto(x.cuando))}</span></span>${p ? pillEstado(p.estado) : ''}</button>`;
+      <span class="t">${p ? esc(p.descripcion || p.ref_base) : x.archivo ? 'Está en otra colección' : 'No está en la lista'}</span><span class="s"><span class="mono">${esc(x.codigo)}</span> · ${esc(haceCuanto(x.cuando))}${x.otra ? ' · en ' + esc(nombreCol(x.otra)) : ''}</span></span>${p ? pillEstado(p.estado) : ''}</button>`;
   }).join('')}</div>`;
 }
 
@@ -1064,12 +1383,15 @@ function abrirSesion() {
 function marcarLote(ids, estado) {
   ids = ids.filter(id => puedeMarcar(S.prod.get(id)));
   if (!ids.length) return toast('Solo consulta: no puedes marcar estas referencias.');
-  ids.forEach(id => { const p = S.prod.get(id); if (p) { p.estado = estado; p.estado_por = S.actor && S.actor.nombre; p.estado_en = ahoraIso(); } });
+  const extra = [];
+  ids.forEach(id => hermanos(S.prod.get(id)).forEach(q => { if (puedeMarcar(q) && N.ORDEN[q.estado] < N.ORDEN[estado] && !ids.includes(q.id) && !extra.includes(q.id)) extra.push(q.id); }));
+  const todos = [...ids, ...extra];
+  todos.forEach(id => { const p = S.prod.get(id); if (p) { p.estado = estado; p.estado_por = S.actor && S.actor.nombre; p.estado_en = ahoraIso(); } });
   reconstruirIndice(); guardarCache();
-  encolar('foto_marcar_lote', { p_productos: ids, p_estado: estado });
-  aHoja(ids.map(id => S.prod.get(id)));
+  encolar('foto_marcar_lote', { p_productos: todos, p_estado: estado });
+  aHoja(todos.map(id => S.prod.get(id)));
   S.sesion = S.sesion.filter(id => !ids.includes(id)); guardarSesion();
-  toast(`${ids.length} marcada${ids.length === 1 ? '' : 's'} como ${N.etiquetaEstado(estado)}`);
+  toast(`${ids.length} marcada${ids.length === 1 ? '' : 's'} como ${N.etiquetaEstado(estado)}${extra.length ? ` · y ${extra.length} en otra${extra.length === 1 ? '' : 's'} colecci${extra.length === 1 ? 'ón' : 'ones'}` : ''}`);
   repintarSuave();
 }
 
@@ -1077,38 +1399,90 @@ function marcarLote(ids, estado) {
 function vistaBuscar(v) {
   v.innerHTML = `<h2 class="titulo">Buscar a mano</h2>
     <p class="hint" style="margin-bottom:10px;">Para stickers escritos a mano o etiquetas dañadas: escribe el código, la referencia o el serial. Con 5 o 6 dígitos ya aparece.</p>
+    <div class="fila" style="margin-bottom:8px;">${chipBuscarEn()}</div>
     <form class="buscador" id="f-buscar" autocomplete="off"><input class="inp" id="q" value="${esc(S.buscar)}" inputmode="${S.tecladoTexto ? 'text' : 'numeric'}" autocapitalize="characters" spellcheck="false" placeholder="Código, referencia o serial" aria-label="Código, referencia o serial">
       <div class="lado"><button type="button" data-acc="teclado">${S.tecladoTexto ? '123' : 'ABC'}</button><button type="submit" aria-label="Buscar">${ico('buscar')}</button></div></form>
-    <button class="btn sec full" style="margin-top:10px;" data-acc="fotos">${ico('imagen')} Leer desde una foto (código de barras o escrito a mano)</button>
+    <button class="btn sec full" style="margin-top:10px;" data-acc="fotos" title="Código de barras o escrito a mano">${ico('imagen')} Leer desde una foto</button>
     <div id="sug" style="margin-top:12px;"></div>`;
   const q = $('#q');
   q.addEventListener('input', () => { S.buscar = q.value; pintarSugerencias(); });
   $('#f-buscar').addEventListener('submit', e => {
     e.preventDefault(); const t = q.value.trim(); if (!t) return;
     const b = N.buscar(S.ix, t, true);
-    if (b.tipo !== 'ninguno') { S.ultimo = { c: '', t: 0 }; alDetectar(t, 'manual'); abrirProducto(b.resultados[0].p, { codigo: N.limpiar(t), tipo: b.tipo, talla: b.resultados[0].talla, sufijo: b.sufijo, resultados: b.resultados }); }
+    if (S.buscarEn) b.resultados = b.resultados.filter(x => x.p.lista_id === S.buscarEn);
+    if (b.tipo !== 'ninguno' && b.resultados.length) { S.ultimo = { c: '', t: 0 }; alDetectar(t, 'manual'); abrirProducto(b.resultados[0].p, { codigo: N.limpiar(t), tipo: b.tipo, talla: b.resultados[0].talla, sufijo: b.sufijo, resultados: b.resultados }); }
     else {
-      const ar = buscarArchivo(N.limpiar(t), true);
+      const ar = buscarArchivo(N.limpiar(t), true, S.buscarEn);
       if (ar) { S.ultimo = { c: '', t: 0 }; alDetectar(t, 'manual'); hoja(tarjetaArchivo({ codigo: N.limpiar(t), archivo: ar })); }
       else pintarSugerencias(true);
     }
   });
+  S._sinExacto = '';
   pintarSugerencias();
   setTimeout(() => q.focus(), 50);
 }
-function pintarSugerencias(sinExacto) {
+function pintarSugerencias(sinExacto, desdeServidor) {
   const d = $('#sug'); if (!d) return;
   const t = S.buscar.trim();
+  if (sinExacto !== undefined) S._sinExacto = sinExacto ? t : '';
   if (t.length < 2) { d.innerHTML = `<div class="vacio">Escribe al menos 2 caracteres.</div>`; return; }
-  const arr = N.sugerir(S.ix, t, 30);
-  d.innerHTML = (sinExacto ? `<div class="res no" style="margin:0 0 10px;"><div class="res-banda">${ico('x')} No está en la lista</div></div>` : '') +
-    (arr.length ? `<div class="items">${arr.map(itemHtml).join('')}</div>` : `<div class="vacio">Nada coincide con “${esc(t)}”.</div>`);
+  const grupos = gruposBusqueda(t);
+  const buscando = S.busq.q === t && S.busq.en === S.buscarEn && S.busq.cargando;
+  d.innerHTML = (S._sinExacto === t ? `<div class="res no" style="margin:0 0 10px;"><div class="res-banda">${ico('x')} No está en las colecciones activas</div></div>` : '') +
+    (grupos.length ? `<p class="hint" style="margin-bottom:6px;">${grupos.length} referencia${grupos.length === 1 ? '' : 's'} · ${S.buscarEn ? 'solo en ' + esc(nombreColMes(S.buscarEn)) : 'se busca en todos los Excel (activos y archivados)'}</p><div class="items">${grupos.map(itemBusqueda).join('')}</div>` : buscando ? '' : `<div class="vacio">Nada coincide con “${esc(t)}” en ningún Excel.</div>`) +
+    (buscando ? `<p class="hint" style="margin-top:8px;">Buscando en todos los Excel…</p>` : '');
+  if (!desdeServidor) buscarEnServidor(t);
+}
+// Une lo del teléfono (colecciones activas + archivo) con lo que encuentra el servidor en todos los Excel
+function gruposBusqueda(t) {
+  const g = new Map(), sc = S.buscarEn;
+  const add = (ref, datos) => { const k = N.clave(ref); if (!g.has(k)) g.set(k, Object.assign({ ref }, datos)); else { const x = g.get(k); Object.keys(datos).forEach(j => { if (x[j] == null || x[j] === '') x[j] = datos[j]; }); } return g.get(k); };
+  N.sugerir(S.ix, t, sc ? 400 : 60).forEach(p => {
+    if (sc && p.lista_id !== sc) return;
+    const x = g.get(N.clave(p.ref_base)), l = infoLista(p.lista_id);
+    const e = add(p.ref_base, { descripcion: p.descripcion, marca: p.marca, serial: p.serial, tallas: p.tallas });
+    if (!x || !x.p || String(l.mes) > String(infoLista(x.p.lista_id).mes)) e.p = p;
+  });
+  let c = N.alnum(t); if (N.sinCeros(c).length >= 3) c = N.sinCeros(c);
+  if (c.length >= 3) (S.archivo || []).forEach(x => {
+    if (g.size >= 60 || g.has(N.clave(x[0])) || (sc && x[3] !== sc)) return;
+    if (N.alnum(x[0]).includes(c) || (N.alnum(x[1]).includes(c)) || (x[4] || []).some(k => N.alnum(k).includes(c))) add(x[0], { serial: x[1] });
+  });
+  if (S.busq.q === t && S.busq.en === sc) (S.busq.res || []).forEach(f => add(f.ref_base, { descripcion: f.descripcion, marca: f.marca, hoja: f.hoja, serial: f.serial, tallas: f.tallas || [] }));
+  S.busq.datos = g;
+  return [...g.values()];
+}
+function itemBusqueda(g) {
+  const ap = aparicionesDe(g.ref);
+  const tallas = (g.tallas || []).filter(Boolean).join(', ');
+  const chips = ap.slice(0, 4).map(a => `<span class="ap-chip ${a.activa ? '' : 'arch'}"><i class="dot c-${esc(N.normEstado(a.estado))}"></i>${esc(mesCorto(a.mes))} · ${esc(a.nombre)} · ${esc(N.etiquetaCorta(a.estado))}</span>`).join('') + (ap.length > 4 ? `<span class="ap-chip">+${ap.length - 4}</span>` : '');
+  const accion = g.p ? `data-acc="ver" data-id="${esc(g.p.id)}"` : `data-acc="ver-ref" data-ref="${esc(g.ref)}"`;
+  return `<button class="item" ${accion}><span class="crece"><span class="t">${esc(g.descripcion || 'Ref. ' + g.ref)}</span>
+    <span class="s"><span class="mono">${esc(g.ref)}</span>${g.serial ? ' · ' + esc(g.serial) : ''}${tallas ? ' · T ' + esc(tallas) : ''}</span>
+    ${chips ? `<span class="aps">${chips}</span>` : ''}</span>${g.p ? pillEstado(g.p.estado) : '<span class="pill">archivada</span>'}</button>`;
+}
+function buscarEnServidor(t) {
+  clearTimeout(S._tBusq);
+  const sc = S.buscarEn;
+  if (S.busq.q === t && S.busq.en === sc && (S.busq.cargando || S.busq.res.length || S.busq.ts)) return;
+  if (!S.demo && !navigator.onLine) return;
+  if (N.alnum(t).length < 3 && !N.norm(t).split(' ').some(w => w.length >= 2)) return;
+  S._tBusq = setTimeout(async () => {
+    S.busq = { q: t, en: sc, res: [], cargando: true }; pintarSugerencias(undefined, true);
+    const args = { p_token: tok(), p_q: t, p_ref: null }; if (sc && S.sqlV >= 7) args.p_lista = sc;
+    const r = S.demo ? Demo.buscar(t, null, sc) : await rpc('foto_buscar', args);
+    if (S.buscar.trim() !== t || S.buscarEn !== sc) return;
+    const res = (r && r.ok ? r.resultados || [] : []).filter(f => !sc || (f.apariciones || []).some(a => a.lista_id === sc));
+    res.forEach(f => S.apar.set(N.clave(f.ref_base), { ts: Date.now(), items: f.apariciones || [] }));
+    S.busq = { q: t, en: sc, res, cargando: false, ts: Date.now() };
+    pintarSugerencias(undefined, true);
+  }, 350);
 }
 function itemHtml(p, extra) {
   const tallas = (p.tallas || []).filter(Boolean).join(', ');
   return `<button class="item" data-acc="ver" data-id="${esc(p.id)}"><span class="crece"><span class="t">${esc(p.descripcion || p.ref_base)}</span>
     <span class="s"><span class="mono">${esc(p.ref_base)}</span>${p.serial ? ' · ' + esc(p.serial) : ''}${tallas ? ' · T ' + esc(tallas) : ''}</span>
-    <span class="s">${esc(p.marca || '')}${extra || ''}${p.otra ? ` · <span class="pill alerta">${p.otra.estado === 'subido' ? 'subida en otra colección' : 'en otra colección'}</span>` : ''}${p.arrastrado_de ? ' · <span class="pill">viene de otro mes</span>' : ''}${(p.alertas || []).length ? ' · <span class="pill alerta">revisar datos</span>' : ''}</span></span>${pillEstado(p.estado)}</button>`;
+    <span class="s">${esc(p.marca || '')}${extra || ''}${p.otra ? ` · <span class="pill alerta">${p.otra.estado === 'subido' ? 'subida en página en otra colección' : 'en otra colección'}</span>` : ''}${p.arrastrado_de ? ' · <span class="pill">viene de otro mes</span>' : ''}${(p.alertas || []).length ? ' · <span class="pill alerta">revisar datos</span>' : ''}</span></span>${pillEstado(p.estado)}</button>`;
 }
 function abrirProducto(p, r) {
   const ov = document.createElement('div'); ov.className = 'ov';
@@ -1126,9 +1500,10 @@ function sedesDisponibles() {
 }
 function vistaPendientes(v) {
   if (S.filtros.sede === '' && S.sede && !S._filtroTocado) S.filtros.sede = S.sede;
-  const hojas = hojasDe([...S.prod.values()]);
-  const sedes = sedesDisponibles();
   const listas = S.listas.filter(l => l.activa);
+  if (S.filtros.lista && !listas.some(l => l.id === S.filtros.lista)) S.filtros.lista = '';
+  const hojas = hojasDe([...S.prod.values()].filter(p => !S.filtros.lista || p.lista_id === S.filtros.lista));
+  const sedes = sedesDisponibles();
   if (S.filtros.hoja && !hojas.some(h => h.hoja === S.filtros.hoja)) S.filtros.hoja = '';
   v.innerHTML = `<h2 class="titulo">Pendientes</h2>
     <details class="resumen-hojas" ${S.filtros.hoja ? '' : 'open'}><summary>Por hoja del Excel <span class="hint">· ${hojas.length}</span></summary>${hojasHtml(hojas, true)}</details>
@@ -1136,9 +1511,9 @@ function vistaPendientes(v) {
       <select id="fl-sede" aria-label="Tienda o bodega"><option value="*">Todas las tiendas</option>${sedes.map(s => `<option value="${esc(s)}" ${S.filtros.sede === s ? 'selected' : ''}>${esc(N.nombreSede(s))}${N.esTransito(s) ? ' (tránsito)' : ''}</option>`).join('')}</select>
       <select id="fl-estado" aria-label="Paso"><option value="falta" ${S.filtros.estado === 'falta' ? 'selected' : ''}>Sin foto (por fotografiar)</option><option value="nodrive" ${S.filtros.estado === 'nodrive' ? 'selected' : ''}>Falta llevar al drive</option>${N.ESTADOS.map(([k, l]) => `<option value="${k}" ${S.filtros.estado === k ? 'selected' : ''}>Solo: ${l}</option>`).join('')}<option value="*" ${S.filtros.estado === '*' ? 'selected' : ''}>Todos los pasos</option></select>
       <select id="fl-hoja" aria-label="Hoja del Excel" class="${S.filtros.hoja ? 'on' : ''}"><option value="">Todas las hojas</option>${hojas.map(h => `<option ${S.filtros.hoja === h.hoja ? 'selected' : ''}>${esc(h.hoja)}</option>`).join('')}</select>
-      ${listas.length > 1 ? `<select id="fl-lista" aria-label="Lista"><option value="">Todas las listas</option>${listas.map(l => `<option value="${esc(l.id)}" ${S.filtros.lista === l.id ? 'selected' : ''}>${esc(l.nombre)}</option>`).join('')}</select>` : ''}
+      ${listas.length > 1 ? `<select id="fl-lista" aria-label="Lista"><option value="">Todas las colecciones</option>${listas.map(l => `<option value="${esc(l.id)}" ${S.filtros.lista === l.id ? 'selected' : ''}>${esc(nombreCol(l.id))}</option>`).join('')}</select>` : ''}
     </div><div id="pend"></div>`;
-  ['sede', 'estado', 'hoja', 'lista'].forEach(k => { const s = $('#fl-' + k); if (s) s.addEventListener('change', () => { S.filtros[k] = s.value === '*' && k === 'sede' ? '*' : s.value; if (k === 'sede') S._filtroTocado = true; if (k === 'hoja') s.classList.toggle('on', !!s.value); pintarPendientes(); }); });
+  ['sede', 'estado', 'hoja', 'lista'].forEach(k => { const s = $('#fl-' + k); if (s) s.addEventListener('change', () => { S.filtros[k] = s.value === '*' && k === 'sede' ? '*' : s.value; if (k === 'sede') S._filtroTocado = true; if (k === 'hoja') s.classList.toggle('on', !!s.value); if (k === 'lista') return vistaPendientes(v); pintarPendientes(); }); });
   pintarPendientes();
 }
 function pintarPendientes() {
@@ -1669,6 +2044,37 @@ function elegirSede(primeraVez) {
 }
 function fijarSede(s) { S.sede = s; guardar('foto_sede', s); S.filtros.sede = s; S._filtroTocado = false; $$('.ov').forEach(o => o.remove()); pintarTop(); repintarSuave(); }
 
+/* ---------- código escrito a mano: corregir los números ---------- */
+document.addEventListener('input', e => {
+  if (e.target.id === 'lapiz-cod') { const v = e.target.value.replace(/\D/g, ''); if (v !== e.target.value) e.target.value = v; pintarLapizSug(); return; }
+  if (e.target.id !== 'mano-cod') return;
+  const v = e.target.value.replace(/\D/g, ''), m = S.resultadoMano, d = $('#mano-prod'); if (!d || !m) return;
+  if (v === m.s) { pintarResultado(); const i = $('#mano-cod'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } return; }
+  const b = v.length >= 4 ? N.buscar(S.ix, v, false) : { tipo: 'ninguno', resultados: [] }, col = colTrabajo();
+  const x = (col && b.resultados.find(y => y.p.lista_id === col.id)) || b.resultados[0];
+  const ar = !x && v.length >= 6 ? buscarArchivo(v, false) : null;
+  d.innerHTML = x ? `${b.tipo === 'exacto' ? `<div class="nota-talla ok">Con ese número: talla ${esc(x.talla || '—')} · está en la lista</div>` : b.tipo === 'otra_talla' ? '<div class="nota-talla">Con ese número: la referencia sí está (otra talla)</div>' : '<div class="nota-talla ok">Con ese número: está en la lista</div>'}
+      <div class="res-marca">${esc(x.p.marca || x.p.hoja || '')}</div><div class="res-desc">${esc(x.p.descripcion || x.p.ref_base)}</div>${col && x.p.lista_id !== col.id ? `<div class="nota-talla" style="margin:8px 0 0;">Está en otra colección: <b>${esc(nombreColMes(x.p.lista_id))}</b></div>` : ''}`
+    : `<div class="nota-talla">${v.length < 4 ? 'Escribe el número completo.' : ar ? 'Con ese número no está en las colecciones activas, pero sí en otro Excel.' : 'Con ese número no está en ningún Excel de la lista.'}</div>${v.length >= 4 ? sugerenciasHtml(v, sugerenciasCodigo(v).slice(0, 4)) : ''}`;
+});
+document.addEventListener('submit', e => {
+  const f = e.target.closest && e.target.closest('form[data-form]'); if (!f) return;
+  e.preventDefault();
+  if (f.dataset.form === 'mano') { const b = $('[data-acc="mano-ok"]'); if (b) b.click(); }
+  else if (f.dataset.form === 'lapiz') {
+    const i = $('#lapiz-cod'), v = i ? i.value.replace(/\D/g, '') : '', x = sugerenciasCodigo(v, null, S.lapiz && S.lapiz.U)[0];
+    if (x && x.motivo === 'exacto') { const b = $(`#lapiz-sug [data-acc="lapiz-elegir"][data-s="${CSS.escape(x.u.s)}"]`); if (b) return elegirDelLapiz(b); }
+    toast(v.length < 4 ? 'Escribe el número completo' : 'Toca la referencia correcta en la lista', 3000);
+  }
+  else if (f.dataset.form === 'mano-buscar') {
+    const v = ($('#mano-leido', f).value || '').replace(/\D/g, ''); if (v.length < 4) return toast('Escribe el número completo');
+    $$('.ov').forEach(o => o.remove()); S.resultadoMano = null;
+    const b = N.buscar(S.ix, v, true);
+    if (b.tipo !== 'ninguno') { S.ultimo = { c: '', t: 0 }; alDetectar(v, 'mano'); }
+    else { S.buscar = v; S.tab = 'buscar'; pintar(); setTimeout(() => { const fb = $('#f-buscar'); if (fb) fb.dispatchEvent(new Event('submit', { cancelable: true })); }, 60); }
+  }
+});
+
 /* ---------- clics (sin código en línea: la política de seguridad lo bloquea) ---------- */
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-acc]'); if (!el) return;
@@ -1678,7 +2084,7 @@ document.addEventListener('click', async e => {
   else if (acc === 'marcar') { const p = S.prod.get(el.dataset.id); if (p) marcar(p, el.dataset.estado); }
   else if (acc.startsWith('lista-') && !esJefe()) return;
   else if (acc === 'ver') { const p = S.prod.get(el.dataset.id); if (p) abrirProducto(p); }
-  else if (acc === 'cerrar') { const o = el.closest('.ov'); if (o) o.remove(); }
+  else if (acc === 'cerrar') { const o = el.closest('.ov'); if (o) { if (o.querySelector('#lapiz-cod')) S.lapiz = null; o.remove(); } }
   else if (acc === 'tema') cambiarTema();
   else if (acc === 'sede') elegirSede(false);
   else if (acc === 'sede-ok') fijarSede(el.dataset.sede);
@@ -1697,8 +2103,18 @@ document.addEventListener('click', async e => {
   else if (acc === 'ver-col') { S.reporteLista = el.dataset.id; pintarMes(); pintarReporte(false); const r = $('#rep'); if (r) r.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   else if (acc === 'cambios') abrirCambios(el.dataset.id);
   else if (acc === 'hojas') abrirHojas();
-  else if (acc === 'mano') { $$('.ov').forEach(o => o.remove()); if (S.tab !== 'escanear') { S.tab = 'escanear'; pintar(); setTimeout(() => Mano.desdeCamara(true), 1200); } else Mano.desdeCamara(true); }
-  else if (acc === 'mano-ok') { const m = S.resultadoMano; S.resultadoMano = null; Cam.pausar(0); if (m) { S.ultimo = { c: '', t: 0 }; alDetectar(m.s, 'mano'); } }
+  else if (acc === 'coleccion') elegirColeccion();
+  else if (acc === 'buscar-en') elegirBuscarEn();
+  else if (acc === 'buscar-en-ok') fijarBuscarEn(el.dataset.id);
+  else if (acc === 'lapiz-elegir') elegirDelLapiz(el);
+  else if (acc === 'lapiz-ver') { const m = (S._lapices || [])[Number(el.dataset.i)]; if (m) abrirLapiz(m); }
+  else if (acc === 'lapiz-cerrar') { $$('.ov').forEach(o => o.remove()); S.lapiz = null; Cam.pausar(800); }
+  else if (acc === 'col-ok') fijarColeccion(el.dataset.id);
+  else if (acc === 'col-alla') { const r = S.resultado; if (r) { r.forzada = el.dataset.id; r.elegida = null; resolverEscaneo(r); aceptarEscaneo(r); actualizarReciente(r); pintarResultado(); pintarRecientes(); pintarEstadoLista(); } }
+  else if (acc === 'res-cual') { const r = S.resultado; if (r) { r.elegida = el.dataset.id; resolverEscaneo(r); actualizarReciente(r); pintarResultado(); } }
+  else if (acc === 'ver-ref') abrirFichaRef(el.dataset.ref);
+  else if (acc === 'mano') { $$('.ov').forEach(o => o.remove()); S.lapiz = null; if (S.tab !== 'escanear') { S.tab = 'escanear'; pintar(); setTimeout(() => Mano.desdeCamara(true), 1200); } else Mano.desdeCamara(true); }
+  else if (acc === 'mano-ok') { const m = S.resultadoMano, inp = $('#mano-cod'), v = inp ? inp.value.replace(/\D/g, '') : ''; S.resultadoMano = null; Cam.pausar(0); if (m) { S.ultimo = { c: '', t: 0 }; alDetectar(v.length >= 4 ? v : m.s, 'mano'); } }
   else if (acc === 'mano-no') { const m = S.resultadoMano; S.resultadoMano = null; Cam.pausar(1500); Mano.previo = null; pintarResultado(); toast('Descartado. Si quieres, escríbelo en Buscar.', 3500); }
   else if (acc === 'mano-buscar') { $$('.ov').forEach(o => o.remove()); S.resultadoMano = null; S.buscar = el.dataset.q || ''; S.tab = 'buscar'; pintar(); }
   else if (acc === 'mano-ver') { const m = (S._manoFotos || [])[Number(el.dataset.i)]; if (m) { $$('.ov').forEach(o => o.remove()); S.resultadoMano = m; S.tab = 'escanear'; pintar(); } }
@@ -1782,6 +2198,7 @@ async function entrar() {
   cargarCola(); cargarSesion(); cargarColaHoja();
   const conCache = cargarCache();
   S.sede = leer('foto_sede') || '';
+  S.coleccion = leer('foto_coleccion') || ''; S.filtros.lista = S.coleccion;
   // Accesos directos desde Equipo Creativo: …#calendario, …#admin
   const h = (location.hash || '').slice(1);
   if (['calendario', 'buscar', 'pendientes'].includes(h) || (h === 'admin' && (S.modo === 'admin' || S.modo === 'demo'))) S.tab = h;
@@ -1865,8 +2282,8 @@ const Demo = {
   iniciar() {
     const hoy = mesHoy(), d = new Date(hoy + 'T12:00:00'); d.setMonth(d.getMonth() - 1);
     const antes = d.toISOString().slice(0, 7) + '-01';
-    const mk = (id, mes, activa) => ({ id, nombre: 'Dackel', mes, origen: 'drive', archivo_id: 'demo', activa, tarea_id: 'demo', total_refs: 0, sincronizada_en: ahoraIso(), sincronizada_por: 'Demo', creado_en: ahoraIso() });
-    this.listas = [mk('demo-nov', hoy, true), mk('demo-oct', antes, false)];
+    const mk = (id, mes, activa, nombre) => ({ id, nombre: nombre || 'Dackel', mes, origen: 'drive', archivo_id: 'demo', activa, tarea_id: 'demo', total_refs: 0, sincronizada_en: ahoraIso(), sincronizada_por: 'Demo', creado_en: ahoraIso() });
+    this.listas = [mk('demo-nov', hoy, true), mk('demo-exe', hoy, true, 'Executive'), mk('demo-oct', antes, false)];
     S.tipoArchivo.demo = 'xlsx'; S.puenteVersion = 6;          // como el Excel real de digital: se lee, no se escribe
     const filas = [
       ['Jacob Cohen', '1495396917851', 'JDMQ0046001T778AV1-600F', ['149539691785108'], ['28'], 'JEANS JACOB COHEN DAMA NEGRO ALGODON T-28 915', [['Calle_109', 1], ['MEDELL', 1]]],
@@ -1892,21 +2309,43 @@ const Demo = {
     // Octubre: la sudadera ya se subió; el tenis IM924 se fotografió → "está en otra colección"
     this.prod.push(prod(filas[5], 5, 'demo-oct', 'subido', 'Mateo'), prod(filas[2], 2, 'demo-oct', 'fotografiado', 'Liz'),
       prod(['Paul Smith', '1924835915406', 'M2R-220X-TP5408-79', ['192483591540603'], ['M'], 'CAMISETA-TSHIRT PAUL SMITH NEGRO ALGODON T-M IM915', [['MEDELL', 1]]], 20, 'demo-oct', 'subido', 'Mateo'));
+    // Executive (activa este mes): comparte la polo Paul Smith y la camisa Eddy Monetti con Dackel; la Canali solo está aquí
+    this.prod.push(prod(filas[4], 4, 'demo-exe', 'pendiente', null), prod(filas[7], 7, 'demo-exe', 'pendiente', null),
+      prod(['Canali', '8050479012345', 'GA00123-X', ['805047901234541', '805047901234542'], ['41', '42'], 'CAMISA CANALI BLANCO ALGODON T-41', [['NOGAL', 1], ['Calle_109', 1]]], 40, 'demo-exe', 'pendiente', null),
+      prod(['Canali', '8050479077777', 'GA00777-Y', ['805047907777750'], ['50'], 'BLAZER CANALI AZUL LANA T-50', [['NOGAL', 1]]], 41, 'demo-exe', 'fotografiado', 'Liz'));
+    // El zapato de la etiqueta escrita: en octubre ya tiene foto; en noviembre viene con el 0 de adelante (como en la etiqueta)
+    this.prod.push(prod(['Harmont & Blaine Shoes', '788058925026', 'EFM2510506020', ['78805892502625', '78805892502621', '78805892502622'], ['45', '41', '42'], 'TENIS H&B SHOES NEGRO CUERO T-45', [['BOGOTA', 1]]], 50, 'demo-oct', 'fotografiado', 'Liz'),
+      prod(['Harmont & Blaine Shoes', '0788058925026', 'EFM2510506020', ['078805892502625'], ['45'], 'TENIS H&B SHOES NEGRO CUERO T-45', [['MEDELL', 1]]], 50, 'demo-nov', 'pendiente', null));
     const s = this.prod.find(p => p.id === 'demo-nov-p5'); s.estado = 'subido'; s.estado_por = 'Subida en página · Dackel'; s.estado_en = ahoraIso();
     this.listas.forEach(l => { l.total_refs = this.prod.filter(p => p.lista_id === l.id).length; });
+    this.copiarFoto();                         // como al correr el SQL v6.4
     this.versiones = { 'demo-nov': [{ creado_en: ahoraIso(), por: 'Jhojan', nuevos: [{ ref: '1495396917851', desc: 'JEANS JACOB COHEN DAMA NEGRO', marca: 'Jacob Cohen' }], quitados: [{ ref: '1924788915582', desc: 'CAMISETA POLO PAUL SMITH VINOTINTO', marca: 'Paul Smith' }] }, { creado_en: ahoraIso(), por: 'Jhojan', primera: true, total: 8, nuevos: [], quitados: [] }] };
   },
   copia: o => JSON.parse(JSON.stringify(o)),
+  // Como foto_copiar_foto del servidor: la foto de otro Excel cuenta en las colecciones activas (solo avanza)
+  copiarFoto(lista, ref) {
+    const act = new Set(this.listas.filter(l => l.activa).map(l => l.id)); let n = 0;
+    this.prod.filter(t => act.has(t.lista_id) && !t.movido_a && (!lista || t.lista_id === lista) && (!ref || N.clave(t.ref_base) === N.clave(ref))).forEach(t => {
+      const o = this.prod.filter(q => q.lista_id !== t.lista_id && !q.movido_a && N.clave(q.ref_base) === N.clave(t.ref_base) && N.ORDEN[q.estado] >= N.ORDEN.fotografiado)
+        .sort((a, b) => N.ORDEN[b.estado] - N.ORDEN[a.estado])[0];
+      if (!o || N.ORDEN[o.estado] <= N.ORDEN[t.estado]) return;
+      const l = this.listas.find(x => x.id === o.lista_id);
+      t.estado = o.estado; t.estado_por = (o.estado === 'subido' ? 'Subida en página · ' : 'Foto de ') + l.nombre + ' · ' + mesCorto(l.mes); t.estado_en = ahoraIso(); n++;
+    });
+    return n;
+  },
   conOtra(p) {
-    const o = this.prod.filter(q => q.ref_base === p.ref_base && q.lista_id !== p.lista_id).sort((a, b) => N.ORDEN[b.estado] - N.ORDEN[a.estado])[0];
+    const o = this.prod.filter(q => N.clave(q.ref_base) === N.clave(p.ref_base) && q.lista_id !== p.lista_id).sort((a, b) => N.ORDEN[b.estado] - N.ORDEN[a.estado])[0];
     const l = o && this.listas.find(x => x.id === o.lista_id);
     return Object.assign(this.copia(p), { otra: o ? { lista_id: l.id, nombre: l.nombre, mes: l.mes, estado: o.estado } : null });
   },
   ev(e) { this.eventos.unshift(Object.assign({ id: this.eventos.length + 1, creado_en: ahoraIso(), actor_nombre: 'Tú (demo)', sede: S.sede }, e)); },
   marcar(id, estado) {
     const p = this.prod.find(x => x.id === id); if (!p) return null;
+    const antes = p.estado;
     p.estado = estado; p.estado_por = 'Tú (demo)'; p.estado_en = ahoraIso();
     this.ev({ accion: 'estado', estado_nuevo: estado, lista_id: p.lista_id, descripcion: p.descripcion });
+    if (N.ORDEN[estado] > N.ORDEN[antes] && N.ORDEN[estado] >= N.ORDEN.fotografiado) this.copiarFoto(null, p.ref_base);
     return this.conOtra(p);
   },
   progreso(l) {
@@ -1923,7 +2362,7 @@ const Demo = {
     const rol = S.demoRol || 'jefe', marcables = rol === 'jefe' ? this.listas.map(l => l.id) : rol === 'encargado' ? ['demo-nov'] : [];
     if ((fn === 'foto_marcar' || fn === 'foto_escanear') && a.p_producto) { const p0 = this.prod.find(x => x.id === a.p_producto); if (p0 && !marcables.includes(p0.lista_id)) return fn === 'foto_marcar' ? { ok: false, error: 'permiso' } : { ok: true, consulta: true, producto: this.conOtra(p0) }; }
     if (fn === 'foto_datos') return { ok: true, actor: { tipo: rol === 'jefe' ? 'admin' : rol === 'encargado' ? 'talento' : 'externo', id: 'demo', nombre: rol === 'encargado' ? 'David (demo)' : rol === 'consulta' ? 'Asesor (demo)' : 'Tú (demo)' },
-      permisos: { admin: rol === 'jefe', marcar: marcables }, ahora: ahoraIso(), completo: true, listas: this.copia(this.listas).map(l => Object.assign(l, { encargado: 'David' })),
+      permisos: { admin: rol === 'jefe', marcar: marcables }, ahora: ahoraIso(), completo: true, listas: this.copia(this.listas).map(l => Object.assign(l, { encargado: l.id === 'demo-exe' ? 'Mateo' : 'David' })),
       productos: this.prod.filter(p => activas.has(p.lista_id) && !p.movido_a).map(p => this.conOtra(p)),
       archivo: this.prod.filter(p => !activas.has(p.lista_id) && !p.movido_a).map(p => [p.ref_base, p.serial, p.estado, p.lista_id, p.codigos]),
       puente: marcables.length ? { url: 'demo', clave: 'demo', carpetas: this.carpetas } : null };
@@ -1950,10 +2389,11 @@ const Demo = {
         if (ex) Object.assign(ex, x, { estado: ex.estado }); else { nv.push({ ref: x.ref_base, desc: x.descripcion, marca: x.marca }); ex = Object.assign({ id: 'demo-n' + Date.now() + i, lista_id: l.id, estado: 'pendiente', activo: true }, x); this.prod.push(ex); }
         if (x.estado_excel && N.ORDEN[x.estado_excel] > N.ORDEN[ex.estado]) { ex.estado = x.estado_excel; ex.estado_por = 'Excel · hoja ' + (x.hoja || ''); ex.estado_en = ahoraIso(); excel++; }
       });
+      const memoria = this.copiarFoto(l.id);
       l.total_refs = this.prod.filter(p => p.lista_id === l.id).length; l.sincronizada_en = ahoraIso();
       const primera = !(this.versiones[l.id] || []).length;
       (this.versiones[l.id] = this.versiones[l.id] || []).unshift({ creado_en: ahoraIso(), por: 'Tú (demo)', primera, total: l.total_refs, nuevos: primera ? [] : nv, quitados: [] });
-      return { ok: true, total: l.total_refs, nuevos: primera ? 0 : nv.length, quitados: 0, primera, excel, hojas: this.progreso(l).hojas, lista_nuevos: primera ? [] : nv, lista_quitados: [] };
+      return { ok: true, v: 7, memoria, total: l.total_refs, nuevos: primera ? 0 : nv.length, quitados: 0, primera, excel, hojas: this.progreso(l).hojas, lista_nuevos: primera ? [] : nv, lista_quitados: [] };
     }
     if (fn === 'foto_salir') return { ok: true };
     return { ok: false, error: 'demo' };
@@ -1974,6 +2414,23 @@ const Demo = {
     return { ok: true, pasados: n };
   },
   driveMarcar(marcas) { marcas.forEach(m => this.marcar(m.id, m.estado)); return { ok: true, n: marcas.length }; },
+  // foto_buscar: todas las colecciones (activas y archivadas), agrupado por referencia
+  buscar(q, ref, lista) {
+    let c = N.alnum(q || ''); if (N.sinCeros(c).length >= 3) c = N.sinCeros(c);
+    const pal = N.norm(q || '').split(' ').filter(w => w.length >= 2);
+    const ok = p => ref ? N.clave(p.ref_base) === N.clave(ref) : ((c.length >= 3 && (N.alnum(p.ref_base).includes(c) || N.alnum(p.serial).includes(c) || (p.codigos || []).some(k => N.alnum(k).includes(c))))
+      || (pal.length && pal.every(w => N.norm([p.descripcion, p.marca, p.hoja, p.serial].join(' ')).includes(w))));
+    const g = new Map();
+    this.prod.filter(p => !p.movido_a && ok(p)).forEach(p => { const k = N.clave(p.ref_base); if (!g.has(k)) g.set(k, []); g.get(k).push(p); });
+    g.forEach((ps, k) => { this.prod.filter(p => !p.movido_a && N.clave(p.ref_base) === k && !ps.includes(p)).forEach(p => ps.push(p)); });
+    const res = [...g.entries()].filter(([, ps]) => !lista || ps.some(p => p.lista_id === lista)).slice(0, 40).map(([r, ps]) => {
+      const l = id => this.listas.find(x => x.id === id) || {};
+      ps.sort((a, b) => String(l(b.lista_id).mes).localeCompare(String(l(a.lista_id).mes)));
+      return { ref_base: ps[0].ref_base, descripcion: ps[0].descripcion, marca: ps[0].marca, hoja: ps[0].hoja, serial: ps[0].serial, tallas: ps[0].tallas,
+        apariciones: ps.map(p => ({ lista_id: p.lista_id, nombre: l(p.lista_id).nombre, mes: l(p.lista_id).mes, activa: l(p.lista_id).activa, producto_id: p.id, estado: p.estado, estado_por: p.estado_por, estado_en: p.estado_en })) };
+    });
+    return { ok: true, resultados: res };
+  },
   hojaEscrita: [],
   escribirHoja(lote) {         // simula el puente v5: Eddy Monetti no tiene lista desplegable (como en el Excel real)
     const TXT = { fotografiado: 'Foto tomada', descargada: 'Foto descargada', drive: 'En el drive', subido: 'Subido en la pagina' };

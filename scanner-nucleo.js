@@ -14,6 +14,9 @@
   // Código limpio: mayúsculas, sin espacios. Deja letras, números y - / .
   N.limpiar = s => String(s == null ? '' : s).toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9\-\/.]/g, '');
   N.alnum = s => N.limpiar(s).replace(/[^A-Z0-9]/g, '');
+  // El 0 de adelante no cambia la referencia: "0788058925026" = "788058925026" (etiquetas, cajas y Excel lo escriben distinto)
+  N.sinCeros = s => { const t = String(s == null ? '' : s).replace(/^0+/, ''); return t || String(s == null ? '' : s); };
+  N.clave = s => N.sinCeros(N.alnum(s));            // para cruzar la misma referencia entre Excel
 
   /* ---------- pasos de la foto (los mismos del Excel de digital) ----------
      Sin foto → (Localizada: ya la ubicaron en tienda) → Foto tomada → Foto descargada
@@ -392,11 +395,12 @@
     const add = (m, k, v) => { if (!k) return; let a = m.get(k); if (!a) m.set(k, a = []); if (!a.some(x => (x.p || x) === (v.p || v))) a.push(v); };
     const lista = productos.filter(p => p.activo !== false);
     lista.forEach(p => {
-      add(porBase, N.limpiar(p.ref_base), p);
+      const rb = N.limpiar(p.ref_base);
+      add(porBase, rb, p); add(porBase, N.sinCeros(rb), p);
       (p.codigos || []).forEach((c, i) => {
-        const cl = N.limpiar(c);
-        add(porCodigo, cl, { p, talla: (p.tallas || [])[i] || '' });
-        if (cl.length > 6) add(porBase, cl.slice(0, -2), p);
+        const cl = N.limpiar(c), c0 = N.sinCeros(cl), x = { p, talla: (p.tallas || [])[i] || '' };
+        add(porCodigo, cl, x); if (c0 !== cl) add(porCodigo, c0, x);
+        if (cl.length > 6) { add(porBase, cl.slice(0, -2), p); add(porBase, N.sinCeros(cl.slice(0, -2)), p); }
       });
       const s = N.limpiar(p.serial);
       if (s.length >= 4) { add(porSerial, s, p); add(porSerialAlnum, N.alnum(s), p); }
@@ -412,9 +416,10 @@
     const c = N.limpiar(entrada);
     const res = (tipo, arr, extra) => ({ tipo, codigo: c, resultados: arr, ...(extra || {}) });
     if (!c) return res('ninguno', []);
-    let r = ix.porCodigo.get(c); if (r) return res('exacto', r.map(x => ({ p: x.p, talla: x.talla })));
-    r = ix.porBase.get(c); if (r) return res('referencia', r.map(p => ({ p, talla: '' })));
-    if (c.length > 6) { r = ix.porBase.get(c.slice(0, -2)); if (r) return res('otra_talla', r.map(p => ({ p, talla: '' })), { sufijo: c.slice(-2) }); }
+    const dos = (m, k) => m.get(k) || (N.sinCeros(k) !== k ? m.get(N.sinCeros(k)) : null);   // con y sin el 0 de adelante
+    let r = dos(ix.porCodigo, c); if (r) return res('exacto', r.map(x => ({ p: x.p, talla: x.talla })));
+    r = dos(ix.porBase, c); if (r) return res('referencia', r.map(p => ({ p, talla: '' })));
+    if (c.length > 6) { r = dos(ix.porBase, c.slice(0, -2)); if (r) return res('otra_talla', r.map(p => ({ p, talla: '' })), { sufijo: c.slice(-2) }); }
     r = ix.porSerial.get(c); if (r) return res('serial', r.map(p => ({ p, talla: '' })));
     if (manual && ix.porSerialAlnum) { r = ix.porSerialAlnum.get(N.alnum(c)); if (r) return res('serial', r.map(p => ({ p, talla: '' }))); }
     return res('ninguno', []);
@@ -424,12 +429,12 @@
   N.sugerir = function (ix, texto, max) {
     max = max || 15;
     const t = N.norm(texto); if (t.length < 2) return [];
-    const c = N.limpiar(texto);
+    let c = N.limpiar(texto); if (N.sinCeros(c).length >= 3) c = N.sinCeros(c);      // "0788…" encuentra "788…"
     const palabras = t.split(' ').filter(Boolean);
     const out = [];
     for (const p of ix.lista) {
       let ok = false;
-      if (c.length >= 3 && (N.limpiar(p.ref_base).includes(c) || (p.codigos || []).some(x => x.includes(c)) || N.alnum(p.serial).includes(N.alnum(c)) && N.alnum(c).length >= 3)) ok = true;
+      if (c.length >= 3 && (N.limpiar(p.ref_base).includes(c) || (p.codigos || []).some(x => N.limpiar(x).includes(c)) || N.alnum(p.serial).includes(N.alnum(c)) && N.alnum(c).length >= 3)) ok = true;
       else { const hay = N.norm([p.descripcion, p.marca, p.serial, p.plu].join(' ')); ok = palabras.every(w => hay.includes(w)); }
       if (ok) { out.push(p); if (out.length >= max) break; }
     }

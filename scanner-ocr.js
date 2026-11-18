@@ -184,7 +184,7 @@
   const mediana = a => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
 
   /* ---------- renglones → átomos (trazos) ---------- */
-  function renglones(comps, W, H) {
+  function renglones(comps, W, H, minimo) {
     const c = comps.filter(k => k.h >= 9 && k.h <= H * 0.3 && k.w <= W * 0.3 && k.area >= 14 && k.w / k.h <= 3.2 && k.area / (k.w * k.h) < 0.85);
     c.forEach(k => { k.cy = (k.y0 + k.y1) / 2; k.cx = (k.x0 + k.x1) / 2; });
     c.sort((a, b) => a.cx - b.cx);
@@ -201,7 +201,14 @@
       if (mejor) { mejor.m.push(k); mejor.h = mediana(mejor.m.map(x => x.h)); }
       else lineas.push({ m: [k], h: k.h });
     }
-    return lineas.filter(L => L.m.length >= 5);
+    lineas.forEach(L => { L.x0 = Math.min(...L.m.map(k => k.x0)); L.x1 = Math.max(...L.m.map(k => k.x1)); L.y0 = Math.min(...L.m.map(k => k.y0)); L.y1 = Math.max(...L.m.map(k => k.y1)); L.cy = (L.y0 + L.y1) / 2; });
+    return lineas.filter(L => L.m.length >= (minimo || 5));
+  }
+  // Números que no cupieron y se escribieron debajo, a la derecha (ej. "…5026" y abajo "25")
+  function continuacion(L, cortas) {
+    const ancho = L.x1 - L.x0;
+    return cortas.find(C => C !== L && C.y0 > L.cy && C.y0 <= L.y1 + 1.3 * L.h && C.x0 >= L.x0 + 0.45 * ancho &&
+      C.x1 <= L.x1 + 2.5 * L.h && C.h >= 0.5 * L.h && C.h <= 1.7 * L.h) || null;
   }
   function unir(a, b) {
     return { x0: Math.min(a.x0, b.x0), x1: Math.max(a.x1, b.x1), y0: Math.min(a.y0, b.y0), y1: Math.max(a.y1, b.y1), px: a.px.concat(b.px), area: a.area + b.area };
@@ -342,7 +349,7 @@
 
   /* ---------- todo junto ---------- */
   // gris: Uint8Array (W*H). Devuelve { ok, mejor, segundo, lectura, motivo, ms }
-  O.leerImagen = function (gris, W, H, candidatos, op) {
+  function leerUna(gris, W, H, candidatos, op) {
     op = op || {};
     const t0 = Date.now(), rot = op.rotaciones || [0, 90, 270, 180];
     const resultados = [], lecturas = [];
@@ -350,18 +357,28 @@
       const r = rotar(gris, W, H, ang);
       const b = O.binarizar(r.g, r.W, r.H);
       const comps = componentes(b, r.W, r.H);
-      for (const L of renglones(comps, r.W, r.H)) {
-        for (const tr of trozos(atomos(L, r.W), L.h)) {
+      const todas = renglones(comps, r.W, r.H, 2), cortas = todas.filter(L => L.m.length <= 4);
+      let li = 0;
+      for (const L of todas.filter(x => x.m.length >= 5)) {
+        li++;
+        const trs = trozos(atomos(L, r.W), L.h), lista = trs.slice();
+        const C = trs.length ? continuacion(L, cortas) : null;
+        if (C) {                                         // el trozo que queda encima de la continuación + sus números
+          const sat = atomos(C, r.W).filter(a => a.y1 - a.y0 + 1 >= 0.45 * L.h);
+          const sobre = trs.slice().sort((p, q) => Math.abs(p[p.length - 1].x1 - C.x1) - Math.abs(q[q.length - 1].x1 - C.x1))[0];
+          if (sat.length >= 1 && sat.length <= 4) { const t = sobre.concat(sat); t.cont = sat.length; lista.push(t); }
+        }
+        for (const tr of lista) {
           // filtro rápido: ¿parecen dígitos?
           let dig = 0; const prev = tr.map(a => { const mk = mascaraDe([a], r.W); const lp = O.clasificar(O.normGlifo(mk.m, mk.w, mk.h)); let bd = 0; for (let d = 1; d < 10; d++) if (lp[d] > lp[bd]) bd = d; if (lp[bd] > Math.log(0.45)) dig++; return lp; });
           if (dig < Math.max(4, 0.45 * tr.length)) continue;
           const seg = leerTrozo(tr, r.W, L.h); prev.forEach((lp, i) => { seg[i][1] = lp; });
           const libre = lecturaLibre(seg, tr.length);
-          lecturas.push({ ang, texto: libre, n: tr.length });
+          lecturas.push({ ang, li, texto: libre, n: tr.length, cont: tr.cont || 0 });
           for (const c of candidatos) {
             if (Math.abs(c.s.length - libre.length) > 4) continue;
             const a = alinear(seg, tr.length, c.s);
-            if (a.score > -1e8) resultados.push(Object.assign({ c, ang, libre }, a));
+            if (a.score > -1e8) resultados.push(Object.assign({ c, ang, li, libre }, a));
           }
         }
       }
@@ -370,7 +387,14 @@
     resultados.sort((x, y) => y.llr - x.llr);
     const mejor = resultados[0];
     const ms = Date.now() - t0;
-    if (!mejor) return { ok: false, motivo: lecturas.length ? 'no_coincide' : 'sin_texto', lectura: (lecturas.sort((a, b) => b.n - a.n)[0] || {}).texto || '', ms };
+    // Lo que parece decir: el renglón donde está el mejor parecido (con su continuación de abajo, si tiene);
+    // si no hay ninguno, el renglón más largo
+    const conCont = mejor && lecturas.find(x => x.ang === mejor.ang && x.li === mejor.li && x.cont);
+    const lectura = mejor ? (conCont ? conCont.texto : mejor.libre) : ((lecturas.sort((a, b) => (b.n + b.cont) - (a.n + a.cont))[0] || {}).texto || '');
+    // Las referencias que más se parecen (distintas), para el lápiz
+    const parecidos = [], vistos = new Set();
+    for (const x of resultados) { const k = x.c.p.ref_base; if (vistos.has(k)) continue; vistos.add(k); parecidos.push(x); if (parecidos.length >= 5) break; }
+    if (!mejor) return { ok: false, motivo: lecturas.length ? 'no_coincide' : 'sin_texto', lectura, parecidos, ms };
     const refDe = r => r.c.p.ref_base;
     const otro = resultados.find(r => refDe(r) !== refDe(mejor));
     const mismaRef = resultados.find(r => r !== mejor && refDe(r) === refDe(mejor) && r.c.tipo === 'codigo');
@@ -378,12 +402,80 @@
     const L = mejor.c.s.length;
     const seguro = mejor.llr >= 0.9 * L && mejor.media >= -1.1 && margen >= 6 && mejor.borrados <= 1 && mejor.saltos <= 1 && mejor.choques === 0;
     const tallaSegura = mejor.c.tipo === 'codigo' && (!mismaRef || mejor.llr - mismaRef.llr >= 2.0);
-    return { ok: seguro, motivo: seguro ? '' : 'dudoso', mejor, segundo: otro || null, margen, tallaSegura, lectura: mejor.libre, ms };
+    return { ok: seguro, motivo: seguro ? '' : 'dudoso', mejor, segundo: otro || null, margen, tallaSegura, lectura, parecidos, ms };
+  }
+
+  /* ---------- la etiqueta blanca: dónde está el papel ----------
+     Sobre una suela, una caja o una mesa, el fondo confunde al lector. Se buscan zonas claras, compactas,
+     que no toquen el borde y con tinta adentro; se lee primero ahí (más grande). */
+  O.buscarPapel = function (gris, W, H) {
+    const f = Math.max(1, Math.ceil(Math.max(W, H) / 420)), w = Math.ceil(W / f), h = Math.ceil(H / f);
+    const g = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) g[y * w + x] = gris[Math.min(H - 1, y * f) * W + Math.min(W - 1, x * f)];
+    const hist = new Float64Array(256); for (let i = 0; i < g.length; i++) hist[g[i]]++;
+    let suma = 0; for (let t = 0; t < 256; t++) suma += t * hist[t];
+    let wb = 0, sb = 0, mejorV = -1, umbral = 128;                  // Otsu
+    for (let t = 0; t < 256; t++) { wb += hist[t]; if (!wb) continue; const wf = g.length - wb; if (!wf) break; sb += t * hist[t];
+      const v = wb * wf * Math.pow(sb / wb - (suma - sb) / wf, 2); if (v > mejorV) { mejorV = v; umbral = t; } }
+    umbral = Math.max(umbral, 120);
+    const lab = new Int32Array(w * h), pila = new Int32Array(w * h), zonas = [];
+    for (let i = 0; i < w * h; i++) {
+      if (lab[i] || g[i] <= umbral) continue;
+      let sp = 0, n = 0, x0 = w, x1 = 0, y0 = h, y1 = 0; pila[sp++] = i; lab[i] = 1;
+      while (sp) { const p = pila[--sp], y = (p / w) | 0, x = p - y * w; n++;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        if (x > 0 && !lab[p - 1] && g[p - 1] > umbral) { lab[p - 1] = 1; pila[sp++] = p - 1; }
+        if (x < w - 1 && !lab[p + 1] && g[p + 1] > umbral) { lab[p + 1] = 1; pila[sp++] = p + 1; }
+        if (y > 0 && !lab[p - w] && g[p - w] > umbral) { lab[p - w] = 1; pila[sp++] = p - w; }
+        if (y < h - 1 && !lab[p + w] && g[p + w] > umbral) { lab[p + w] = 1; pila[sp++] = p + w; } }
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+      if (n < 0.003 * w * h || n > 0.45 * w * h) continue;
+      if (x0 === 0 || y0 === 0 || x1 === w - 1 || y1 === h - 1) continue;
+      const ar = Math.max(bw, bh) / Math.min(bw, bh); if (ar > 8) continue;
+      let tinta = 0; for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (g[y * w + x] <= umbral) tinta++;
+      const relleno = n / (bw * bh), t = tinta / (bw * bh);
+      if (relleno < 0.55 || t < 0.02 || t > 0.45) continue;
+      zonas.push({ n, x0: x0 * f, y0: y0 * f, x1: Math.min(W - 1, (x1 + 1) * f), y1: Math.min(H - 1, (y1 + 1) * f) });
+    }
+    return zonas.sort((a, b) => b.n - a.n).slice(0, 2).map(z => {
+      const mx = Math.round(0.06 * (z.x1 - z.x0)) + 4, my = Math.round(0.08 * (z.y1 - z.y0)) + 4;
+      return { x0: Math.max(0, z.x0 - mx), y0: Math.max(0, z.y0 - my), x1: Math.min(W - 1, z.x1 + mx), y1: Math.min(H - 1, z.y1 + my) };
+    });
+  };
+  function recorte(gris, W, H, rc) {
+    const rw = rc.x1 - rc.x0 + 1, rh = rc.y1 - rc.y0 + 1, corto = Math.min(rw, rh);
+    const k = Math.max(1, Math.min(3, 260 / corto)), w = Math.round(rw * k), h = Math.round(rh * k), g = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) { const sy = rc.y0 + y / k, y0 = Math.floor(sy), fy = sy - y0, y1 = Math.min(rc.y1, y0 + 1);
+      for (let x = 0; x < w; x++) { const sx = rc.x0 + x / k, x0 = Math.floor(sx), fx = sx - x0, x1 = Math.min(rc.x1, x0 + 1);
+        const a = gris[y0 * W + x0], b = gris[y0 * W + x1], c = gris[y1 * W + x0], d = gris[y1 * W + x1];
+        g[y * w + x] = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy; } }
+    return { g, W: w, H: h };
+  }
+  const mejorQue = (a, b) => !b || (a.ok && !b.ok) || (a.ok === b.ok && (a.mejor ? a.mejor.llr : -1e9) > (b.mejor ? b.mejor.llr : -1e9));
+  O.leerImagen = function (gris, W, H, candidatos, op) {
+    op = op || {};
+    const t0 = Date.now();
+    let mejor = null;
+    if (op.papel !== false) {
+      for (const rc of O.buscarPapel(gris, W, H)) {
+        const c = recorte(gris, W, H, rc), horizontal = (rc.x1 - rc.x0) >= (rc.y1 - rc.y0);
+        const r = leerUna(c.g, c.W, c.H, candidatos, { rotaciones: horizontal ? [0, 180] : [90, 270] });
+        r.papel = rc;
+        if (mejorQue(r, mejor)) mejor = r;
+        if (r.ok) break;
+      }
+    }
+    if (!mejor || !mejor.ok) {
+      const r = leerUna(gris, W, H, candidatos, { rotaciones: op.rotaciones, tiempoMax: op.tiempoMax ? Math.max(500, op.tiempoMax - (Date.now() - t0)) : 0 });
+      if (mejorQue(r, mejor)) { if (mejor && mejor.papel && !r.papel) r.papel = mejor.papel; mejor = r; }
+    }
+    mejor.ms = Date.now() - t0;
+    return mejor;
   };
 
-  O._int = { componentes, renglones, atomos, trozos, rotar, mascaraDe, leerTrozo, alinear, lecturaLibre };
+  O._int = { componentes, renglones, atomos, trozos, rotar, mascaraDe, leerTrozo, alinear, lecturaLibre, continuacion, recorte, leerUna };
   // Candidatos livianos (los que manda la app al worker): [{ s, ref, id, tipo, talla }]
-  O.candidatosLivianos = l => (l || []).map(c => ({ s: c.s, p: { ref_base: c.ref, id: c.id }, tipo: c.tipo, talla: c.talla || '' }));
+  O.candidatosLivianos = l => (l || []).map(c => ({ s: c.s, p: { ref_base: c.ref, id: c.id, lista_id: c.lista || null }, tipo: c.tipo, talla: c.talla || '' }));
   if (typeof module === 'object' && module.exports) module.exports = O;
   else root.OCR = O;
   // Como Web Worker: lee sin trabar la cámara
@@ -396,7 +488,9 @@
         const r = O.leerImagen(d.gris, d.W, d.H, cands, { rotaciones: d.rot, tiempoMax: d.tiempoMax });
         const m = r.mejor;
         root.postMessage({ id: d.id, firma, ok: r.ok, motivo: r.motivo, lectura: r.lectura || '', ms: r.ms, margen: r.margen, tallaSegura: !!r.tallaSegura,
-          mejor: m ? { s: m.c.s, id: m.c.p.id, ref: m.c.p.ref_base, tipo: m.c.tipo, talla: m.c.talla, llr: m.llr, media: m.media, ang: m.ang } : null });
+          mejor: m ? { s: m.c.s, id: m.c.p.id, ref: m.c.p.ref_base, lista: m.c.p.lista_id, tipo: m.c.tipo, talla: m.c.talla, llr: m.llr, media: m.media, ang: m.ang } : null,
+          parecidos: (r.parecidos || []).map(x => ({ s: x.c.s, id: x.c.p.id, ref: x.c.p.ref_base, lista: x.c.p.lista_id, tipo: x.c.tipo, talla: x.c.talla, llr: x.llr })),
+          papel: r.papel || null });
       } catch (err) { root.postMessage({ id: d.id, ok: false, motivo: 'error', error: String(err && err.message || err) }); }
     };
   }

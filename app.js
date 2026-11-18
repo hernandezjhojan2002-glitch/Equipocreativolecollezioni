@@ -4265,4 +4265,68 @@ function fotoDirExcel(id, btn) {
   document.head.appendChild(css);
 })();
 
+/* ---------- Nuevo → "Copiar link del formulario de solicitudes" (v6.4) ----------
+   Antes copiaba la dirección de la página de admin y SIN el código secreto: a quien lo recibía le salía
+   "Este link no es válido". Ahora entrega el link con código (el de Links y respaldo); si no hay, lo crea.
+   Se muestra en una ventanita con Copiar y Compartir (en el celular copiar después de esperar a internet falla). */
+async function copiarLinkSolicitudes() {
+  const r = await rpcSeguro('enlaces_listar');
+  if (!r.ok) { toast(r.error === 'migracion' ? 'Falta correr la migración v10 en Supabase.' : 'No pude traer el link. Revisa tu internet e intenta de nuevo.'); return; }
+  STATE._enlaces = r.items || [];
+  const sol = STATE._enlaces.filter(e => e.activo && e.tipo === 'solicitud');
+  linkSolicitudModal(sol.length ? sol : null);
+}
+function linkSolicitudModal(sol) {
+  const usos = e => e.usos ? `usado ${e.usos} ${e.usos === 1 ? 'vez' : 'veces'}` : 'aún sin usar';
+  const ov = el(`<div class="modal-overlay pd"><div class="modal" role="dialog" aria-modal="true" aria-label="Link del formulario de solicitudes">
+    <h3>Link del formulario de solicitudes</h3>
+    ${sol ? `
+      ${sol.length > 1 ? `<div class="field"><label for="ls-cual">¿Cuál link? Cada uno tiene su propio código</label><select id="ls-cual">${sol.map(e => `<option value="${esc(e.id)}">${esc(e.nombre)} · ${esc(usos(e))}</option>`).join('')}</select></div>`
+        : `<p class="hint" style="margin-bottom:8px;">${esc(sol[0].nombre)} · ${esc(usos(sol[0]))}</p>`}
+      <div class="field"><input id="ls-url" readonly aria-label="Link del formulario"></div>
+      <p class="hint">Quien lo abra puede enviar solicitudes sin entrar a la app. Si alguien ya no debe tenerlo, revócalo en Links y respaldo.</p>
+      <div class="form-error" id="ls-error" role="alert"></div>
+      <div class="modal-actions"><button type="button" class="btn secondary" id="ls-cerrar">Cerrar</button>${navigator.share ? '<button type="button" class="btn secondary" id="ls-compartir">Compartir</button>' : ''}<button type="button" class="btn" id="ls-copiar">Copiar link</button></div>`
+    : `<p class="hint">Todavía no hay un link del formulario. Créalo aquí: lleva un código secreto y lo puedes revocar cuando quieras.</p>
+      <div class="field"><label for="ls-nombre">Nombre (para que sepas quién lo tiene)</label><input id="ls-nombre" maxlength="60" value="Formulario de solicitudes"></div>
+      <div class="form-error" id="ls-error" role="alert"></div>
+      <div class="modal-actions"><button type="button" class="btn secondary" id="ls-cerrar">Cancelar</button><button type="button" class="btn" id="ls-crear">Crear link</button></div>`}
+  </div></div>`);
+  document.body.appendChild(ov);
+  const cerrar = () => ov.remove();
+  $('#ls-cerrar', ov).onclick = cerrar;
+  ov.addEventListener('mousedown', ev => { if (ev.target === ov) cerrar(); });
+  if (!sol) {
+    const crear = async () => {
+      const nombre = $('#ls-nombre', ov).value.trim();
+      if (!nombre) { $('#ls-error', ov).textContent = 'Ponle un nombre (por ejemplo, a quién se lo vas a dar).'; return; }
+      $('#ls-crear', ov).disabled = true;
+      const r = await rpcSeguro('enlace_crear', { p_tipo: 'solicitud', p_nombre: nombre });
+      if (!r.ok) { $('#ls-crear', ov).disabled = false; $('#ls-error', ov).textContent = r.error === 'limite' ? 'Tienes demasiados links activos. Revoca los que no uses en Links y respaldo.' : 'No se pudo crear. Intenta de nuevo.'; return; }
+      cerrar(); await copiarLinkSolicitudes();
+      if (typeof pintarEnlaces === 'function' && $('#enlaces-seguros')) pintarEnlaces();
+    };
+    $('#ls-crear', ov).onclick = crear;
+    $('#ls-nombre', ov).addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); crear(); } });
+    setTimeout(() => $('#ls-nombre', ov).focus(), 60);
+    return;
+  }
+  const actual = () => { const id = $('#ls-cual', ov) ? $('#ls-cual', ov).value : sol[0].id; return sol.find(e => e.id === id) || sol[0]; };
+  const pintar = () => { $('#ls-url', ov).value = urlEnlace(actual()); };
+  pintar();
+  if ($('#ls-cual', ov)) $('#ls-cual', ov).onchange = pintar;
+  $('#ls-copiar', ov).onclick = async () => {
+    const url = $('#ls-url', ov).value;
+    let ok = false;
+    try { await navigator.clipboard.writeText(url); ok = true; } catch (e) {}
+    if (!ok) { const i = $('#ls-url', ov); i.focus(); i.select(); i.setSelectionRange(0, url.length); try { ok = document.execCommand('copy'); } catch (e) {} }
+    if (ok) { toast('Link del formulario copiado'); cerrar(); }
+    else $('#ls-error', ov).textContent = 'Tu navegador no dejó copiar: mantén presionado el link de arriba y elige Copiar.';
+  };
+  if ($('#ls-compartir', ov)) $('#ls-compartir', ov).onclick = async () => {
+    try { await navigator.share({ title: 'Solicitudes · Equipo creativo LE COLLEZIONI', text: 'Para pedir un trabajo al equipo creativo, llena este formulario:', url: $('#ls-url', ov).value }); cerrar(); } catch (e) {}
+  };
+  setTimeout(() => $('#ls-copiar', ov).focus(), 60);
+}
+
 boot();
