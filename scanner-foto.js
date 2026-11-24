@@ -328,7 +328,7 @@ function idDeDrive(t) {
   return /^[\w-]{20,}$/.test(t) ? t : '';
 }
 function base64ABytes(b64) { const bin = atob(b64); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
-const ERR_PUENTE = { clave: 'La clave del puente no coincide (revísala en Admin → Conexión).', id: 'El link de Drive no es válido.', tipo: 'Ese archivo no es un Excel (.xlsx) ni una hoja de Google.', acceso: 'Tu cuenta de Google no puede abrir ese archivo. Pide que te lo compartan.' };
+const ERR_PUENTE = { clave: 'La clave del puente no coincide (revísala en Admin → Conexión).', id: 'El link de Drive no es válido.', tipo: 'Ese archivo de Drive no es Excel (.xlsx) ni Hoja de Google. Ábrelo en Drive con Hojas de cálculo de Google (Archivo → Guardar como Hojas de cálculo de Google) y conecta ese link, o súbelo con “Subir Excel” (también sirve CSV).', acceso: 'Tu cuenta de Google no puede abrir ese archivo. Pide que te lo compartan.' };
 async function traerDeDrive(lista) {
   if (S.demo) return Demo.excel();
   if (!S.puente || !S.puente.url) throw new Error('Falta conectar el puente de Drive (Admin → Conexión).');
@@ -344,9 +344,9 @@ async function traerDeDrive(lista) {
 }
 async function sincronizarLista(lista, bytes, silencioso) {
   const hojas = await N.leerXlsx(bytes);
-  const r = N.parsearLibro(hojas);
+  const r = N.parsearLibro(hojas, { nombre: lista.nombre });
   S.lecturaExcel[lista.id] = { hojas: r.hojas, cuando: ahoraIso() };
-  if (!r.productos.length) throw new Error('No encontré referencias en ese Excel (revisa que tenga columnas como "Ref base" o "Códigos").');
+  if (!r.productos.length) throw new Error('No encontré productos en ese archivo: necesito una columna con la referencia, el serial o el código de barras (con título o sin él).');
   const s = await rpc('foto_sync', { p_token: tok(), p_lista: lista.id, p_productos: r.productos });
   if (!s.ok) throw new Error(s.error === 'permiso' ? 'No tienes permiso para actualizar listas.' : s.error === 'red' ? 'Sin conexión: intenta de nuevo.' : 'No pude guardar la lista (' + s.error + ').');
   if (!S.demo) S.sqlV = s.v || 0;                                     // el servidor todavía tiene el SQL viejo
@@ -1096,7 +1096,7 @@ function tarjetaProducto(r) {
   if (r.tipo === 'exacto') nota = `<div class="nota-talla ok">Talla ${esc(r.talla || '—')} · está en la lista</div>`;
   else if (r.tipo === 'otra_talla') nota = `<div class="nota-talla">Talla distinta a la de la lista (código …${esc(r.sufijo)}). La referencia sí está: sirve para la foto.</div>`;
   else if (r.tipo === 'serial') nota = `<div class="nota-talla ok">Encontrada por serial</div>`;
-  else if (r.tipo === 'referencia') nota = `<div class="nota-talla ok">Encontrada por referencia base</div>`;
+  else if (r.tipo === 'referencia') nota = `<div class="nota-talla ok">${p.serial && N.alnum(p.serial) === N.alnum(p.ref_base) ? 'Encontrada por serial' : 'Encontrada por referencia base'}</div>`;
   if (r.origen === 'mano') nota += `<div class="nota-talla ok">Código escrito a mano · confirmado por ti</div>`;
   if (r.forzada) nota += `<div class="nota-talla">De <b>${esc(nombreColMes(p.lista_id))}</b> · no es tu colección de trabajo.</div>`;
   if (/^Foto de /.test(p.estado_por || '')) nota += `<div class="nota-talla ok">Ya tiene foto en otro Excel: <b>${esc(String(p.estado_por).slice(8))}</b>. Una foto sirve para los dos.</div>`;
@@ -1117,7 +1117,7 @@ function tarjetaProducto(r) {
       <dl class="datos">
         <dt>Escaneado</dt><dd class="mono">${esc(r.codigo || '—')}</dd>
         ${p.hoja && p.hoja !== p.marca ? `<dt>Hoja</dt><dd>${esc(p.hoja)}</dd>` : ''}
-        <dt>Ref. base</dt><dd class="mono">${esc(p.ref_base)}</dd>
+        ${p.serial && N.alnum(p.serial) === N.alnum(p.ref_base) ? '' : `<dt>Ref. base</dt><dd class="mono">${esc(p.ref_base)}</dd>`}
         ${p.serial ? `<dt>Serial</dt><dd class="mono">${esc(p.serial)}</dd>` : ''}
         <dt>Tallas</dt><dd>${tallasHtml}</dd>
         <dt>Bodegas</dt><dd>${bodsHtml}</dd>
@@ -1606,7 +1606,7 @@ function pintarFormMes() {
     <div class="campo"><label for="nl-link">Link del Excel en Drive</label><input id="nl-link" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
     <div class="fila"><button class="btn" data-acc="lista-crear">Conectar desde Drive</button><button class="btn sec" data-acc="lista-crear-archivo">${ico('subir')} Subir Excel</button></div>
     <div class="error" id="nl-error"></div>
-    <input type="file" id="archivo" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden"></div>`;
+    <input type="file" id="archivo" accept=".xlsx,.csv,.tsv,.txt,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" class="hidden"></div>`;
 }
 
 async function pintarReporte(traer) {
@@ -1737,10 +1737,18 @@ function mostrarCambiosSync(lista, s, r) {
     ${hojasHtml(hs, false)}
     ${sinCol.length ? `<p class="hint" style="margin-top:8px;">Sin columna de proceso (todas quedan “Sin foto” hasta que alguien las marque): ${esc(sinCol.join(', '))}.</p>` : ''}
     ${ignoradas.length ? `<p class="hint" style="margin-top:4px;">No son listas de productos (no se leen): ${esc(ignoradas.join(', '))}.</p>` : ''}
+    ${columnasLeidasHtml(r)}
     ${comparacionExcel(lista, r, hs)}
     ${avisoEscritura(lista)}
     ${nv.length ? `<div class="sec-t">Nuevas (${nv.length})</div>${listaRefs(nv)}` : ''}${qt.length ? `<div class="sec-t">Ya no están (${qt.length})</div>${listaRefs(qt)}` : ''}
     <button class="btn full" style="margin-top:14px;" data-acc="cerrar">Listo</button>`);
+}
+
+// Qué entendió de cada hoja (sirve para revisar un Excel con otro formato)
+const NOMBRE_COL = { ref_base: 'referencia', codigos: 'códigos de barras', serial: 'serial', descripcion: 'descripción', tallas: 'talla', marca: 'marca', bodegas: 'tienda', cantidad: 'cantidad', precio: 'precio', plu: 'PLU', ecommerce: 'e-commerce' };
+function columnasLeidasHtml(r) {
+  const hs = ((r && r.hojas) || []).filter(h => h.usada); if (!hs.length) return '';
+  return `<details class="leidas" style="margin-top:6px;"><summary class="hint">Qué columnas leí</summary>${hs.map(h => `<p class="hint" style="margin:4px 0 0;"><b>${esc(h.nombre)}</b>: ${esc((h.columnas || []).map(k => NOMBRE_COL[k] || k).join(', '))}${h.columna_estado ? ', proceso (columna ' + esc(h.columna_estado) + ')' : ''}${h.por_contenido ? ' · sin títulos: lo reconocí por lo que trae cada columna' : ''}${h.fila_encabezado > 1 ? ' · títulos en la fila ' + h.fila_encabezado : ''}</p>`).join('')}</details>`;
 }
 
 /* ---------- Pendientes de meses anteriores: se pregunta cada vez ---------- */
@@ -1809,7 +1817,7 @@ async function vistaAdmin(v) {
     <div class="sec-t">Avance para los jefes</div><div id="ad-avance"></div>
     <div class="sec-t">Conexión con Drive</div><div id="ad-conexion"><p class="hint">Cargando…</p></div>
     <div class="sec-t">Datos por revisar</div><div id="ad-alertas"></div>
-    <input type="file" id="archivo" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">`;
+    <input type="file" id="archivo" accept=".xlsx,.csv,.tsv,.txt,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" class="hidden">`;
   pintarAdminListas();
   pintarAdminAlertas();
   pintarAdminAvance();

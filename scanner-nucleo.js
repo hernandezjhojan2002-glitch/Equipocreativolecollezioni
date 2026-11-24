@@ -117,8 +117,42 @@
   }
 
   // Devuelve [{nombre, filas:[[texto,...],...]}] con todas las hojas
+  // CSV / TSV / tabla HTML (algunos sistemas exportan ".xls" que en realidad es texto o HTML)
+  function decodificarTexto(b) {
+    if (b[0] === 0xFF && b[1] === 0xFE) return new TextDecoder('utf-16le').decode(b.subarray(2));
+    if (b[0] === 0xFE && b[1] === 0xFF) return new TextDecoder('utf-16be').decode(b.subarray(2));
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(b).replace(/^\uFEFF/, ''); } catch (e) { return new TextDecoder('windows-1252').decode(b); }
+  }
+  N.leerCsv = function (txt) {
+    const linea1 = (txt.split(/\r?\n/).find(l => l.trim()) || '');
+    const sep = [';', '\t', ',', '|'].map(c => [c, linea1.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const filas = []; let fila = [], campo = '', comillas = false;
+    for (let i = 0; i < txt.length; i++) {
+      const ch = txt[i];
+      if (comillas) { if (ch === '"') { if (txt[i + 1] === '"') { campo += '"'; i++; } else comillas = false; } else campo += ch; continue; }
+      if (ch === '"' && campo === '') comillas = true;
+      else if (ch === sep) { fila.push(campo); campo = ''; }
+      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && txt[i + 1] === '\n') i++; fila.push(campo); filas.push(fila); fila = []; campo = ''; }
+      else campo += ch;
+    }
+    if (campo !== '' || fila.length) { fila.push(campo); filas.push(fila); }
+    return filas.map(f => f.map(v => v.trim() === '' ? null : v.trim()));
+  };
+  function leerHtml(txt) {
+    const ent = t => t.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).trim();
+    const tablas = txt.match(/<table[\s\S]*?<\/table>/gi) || [];
+    return tablas.map((t, i) => ({ nombre: 'Hoja' + (i + 1), filas: (t.match(/<tr[\s\S]*?<\/tr>/gi) || []).map(tr => (tr.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) || []).map(td => { const v = ent(td); return v === '' ? null : v; })) }));
+  }
   N.leerXlsx = async function (bytes) {
-    const zip = await leerZip(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+    const b0 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    if (!(b0[0] === 0x50 && b0[1] === 0x4B)) {                                    // no es .xlsx (zip)
+      if (b0[0] === 0xD0 && b0[1] === 0xCF && b0[2] === 0x11 && b0[3] === 0xE0) throw new Error('Es un Excel viejo (.xls). Ábrelo y guárdalo como .xlsx, o súbelo a Drive como Hoja de Google y conecta ese link.');
+      const txt = decodificarTexto(b0);
+      if (/^\s*</.test(txt) && /<table/i.test(txt)) { const hs = leerHtml(txt); if (hs.length) return hs; }
+      if (/[\x00-\x08]/.test(txt.slice(0, 2000))) throw new Error('No reconozco ese archivo. Súbelo como Excel (.xlsx), CSV o Hoja de Google.');
+      return [{ nombre: 'Hoja1', filas: N.leerCsv(txt) }];
+    }
+    const zip = await leerZip(b0);
     const wb = await zip.texto('xl/workbook.xml');
     if (!wb) throw new Error('El archivo no parece un Excel (.xlsx). Si es .xls viejo, guárdalo como .xlsx.');
     const rels = sinPrefijos((await zip.texto('xl/_rels/workbook.xml.rels')) || '');
@@ -243,20 +277,25 @@
      Detecta las columnas por su NOMBRE (no por posición), así
      funciona aunque cada hoja tenga columnas distintas.
      ============================================================ */
+  // Nombres de columna conocidos: Excel de digital (Ref base, Códigos…), los del sistema (cod_ref, nom_ref,
+  // serial, saldo, Ini_Bod, Nom_Linea…) y otros comunes (SKU, EAN, Referencia, Tienda…)
   const COLUMNAS = [
-    ['ref_base', /ref(erencia)?\.?\s*base|serial\s*unific|cod(igo)?\.?\s*base|ref\.?\s*unific/],
-    ['marca', /^marca/],
-    ['plu', /\bplu\b|nom_?ref/],
-    ['codigos', /^cod(igo)?s?\b|cod_?ref|\bean\b|barras/],
+    ['ref_base', /ref(erencia)?\.?\s*base|serial\s*unific|cod(igo)?\.?\s*base|ref\.?\s*unific|^ref(erencia)?\.?$|^ref(erencia)?\.?\s*(del?\s*)?(producto|articulo|item)$|^sku$|^style$|^estilo\s*color|^reference$|^ref\.?\s*no\.?$|^style\s*(no|code|number)|^item\s*(no|code|number)|^article\s*(no|number)/],
+    ['marca', /^marca|^brand|nom_?linea|^l[ií]nea$|^proveedor$/],
+    ['plu', /\bplu\b/],
+    ['codigos', /^cod(igo)?s?\b|cod_?ref|\bean\b|\bupc\b|barras|barcode|^gtin/],
     ['serial', /^(nombre\s*)?serial\b|^estilo\b|^modelo\b/],
-    ['tallas', /^talla/],
-    ['descripcion', /descrip/],
-    ['bodegas', /bodega|^tienda|ubicaci/],
+    ['tallas', /^talla|desc_?talla|^size$/],
+    ['descripcion', /descrip|^nom_?ref|^nombre( del)?( producto| articulo)?$|^producto$|^detalle|^articulo$|^product( name)?$|^item name$|^name$|^title$/],
+    ['bodegas', /bodega|^tienda|ubicaci|^b$|ini_?bod|^almac[eé]n|^sede$|^punto de venta|^store|^shop$|^location|^warehouse/],
     ['ecommerce', /e-?com+erce/],
-    ['cantidad', /^cant|^unidades$/],
-    ['precio', /precio|^pvp/]
+    ['cantidad', /^cant|^unidades$|^saldo|^stock$|^existencia|^qty|^inventario$|^quantity|^units?$/],
+    ['precio', /precio|^pvp|^val_?ref$|^price|^retail/]
   ];
   const CLAVE_ENC = ['ref_base', 'codigos', 'serial', 'descripcion', 'marca', 'tallas'];
+  // Columnas que no se muestran en la tarjeta (costos, fechas, totales del sistema…)
+  const NO_EXTRA = /cost|^fec|fecha|% ?desc|descuento|^cod_?(tip|imp)|^anos?$|^im$|^si$|prec_?total|^v\.? ?invt|valor|^total|^%|porcentaje|avance/;
+  const ETIQUETA_EXTRA = [[/nom_?grup|^grupo|^categor/, 'Grupo'], [/^sexo|^genero/, 'Sexo'], [/^color/, 'Color']];
 
   function claveColumna(texto) {
     const t = N.norm(texto);
@@ -264,16 +303,69 @@
     for (const [k, re] of COLUMNAS) if (re.test(t)) return k;
     return null;
   }
+  // Celda como texto limpio: 192489788161202.0 → 192489788161202 · 1.92489788161202E+14 → 192489788161202
+  N.celda = function (v) {
+    if (v == null) return '';
+    let t = String(v).trim();
+    if (/^-?\d+\.0+$/.test(t)) t = t.replace(/\.0+$/, '');
+    else if (/^-?\d(\.\d+)?e\+?\d+$/i.test(t)) { const n = Number(t); if (Number.isSafeInteger(n)) t = String(n); }
+    return t;
+  };
+  const esNum = v => /^-?[\d.,$ ]+$/.test(v) && /\d/.test(v);
+  const pareceCodigo = v => /^[A-Za-z0-9][A-Za-z0-9\-\/.]{4,24}$/.test(v) && /\d/.test(v);
+  const pareceTexto = v => v.length >= 10 && /\s/.test(v) && /[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}/.test(v);
 
+  // Fila de encabezado: la que más nombres conocidos tenga (en las primeras 30), con una columna que identifique
+  // (referencia, códigos o serial) y al menos 3 columnas reconocidas.
   function buscarEncabezado(filas) {
-    for (let r = 0; r < Math.min(filas.length, 25); r++) {
-      const f = filas[r] || [];
-      const mapa = {}; const usadas = new Set();
-      f.forEach((c, i) => { const k = claveColumna(c); if (k && mapa[k] == null) { mapa[k] = i; usadas.add(i); } });
-      const puntos = CLAVE_ENC.filter(k => mapa[k] != null).length;
-      if (puntos >= 3 && (mapa.ref_base != null || mapa.codigos != null)) return { fila: r, mapa, usadas };
+    let mejor = null;
+    for (let r = 0; r < Math.min(filas.length, 30); r++) {
+      const cands = {};
+      (filas[r] || []).forEach((c, i) => { const k = claveColumna(c); if (k) (cands[k] = cands[k] || []).push(i); });
+      const ks = Object.keys(cands);
+      if (!(cands.ref_base || cands.codigos || cands.serial) || ks.length < 3) continue;
+      const puntos = ks.length + CLAVE_ENC.filter(k => cands[k]).length;
+      if (!mejor || puntos > mejor.puntos) mejor = { fila: r, cands, puntos };
     }
-    return null;
+    return mejor;
+  }
+  // Si dos columnas son del mismo tipo (Talla y desc_talla, Bodega e Ini_Bod…), se escoge por lo que traen
+  function resolverColumnas(enc, datos) {
+    const valores = c => datos.slice(0, 400).map(f => N.celda((f || [])[c])).filter(Boolean);
+    const puntaje = {
+      bodegas: vs => vs.filter(v => !esNum(v)).length,                         // nombres de tienda, no números
+      tallas: vs => vs.filter(v => !esNum(v)).length * 2 + vs.length,            // "S, M, L" antes que "2"
+      codigos: vs => vs.filter(v => /^\d{8,16}$/.test(N.limpiar(v))).length,
+      descripcion: vs => vs.reduce((s, v) => s + Math.min(v.length, 60), 0)
+    };
+    const mapa = {}, usadas = new Set();
+    for (const [k, cols] of Object.entries(enc.cands)) {
+      let c = cols[0];
+      if (cols.length > 1) { const p = puntaje[k] || (vs => vs.length); c = cols.slice().sort((x, y) => p(valores(y)) - p(valores(x)) || x - y)[0]; }
+      mapa[k] = c; cols.forEach(x => usadas.add(x));
+    }
+    return { fila: enc.fila, mapa, usadas };
+  }
+  // Sin encabezados reconocibles: se mira lo que hay en cada columna (códigos, descripciones)
+  function porContenido(filas) {
+    const muestra = filas.slice(0, 300), nCols = muestra.reduce((m, f) => Math.max(m, (f || []).length), 0), st = [];
+    for (let c = 0; c < nCols; c++) {
+      const vs = muestra.map(f => N.celda((f || [])[c])).filter(Boolean);
+      if (vs.length < 5) continue;
+      st.push({ c, n: vs.length, codigo: vs.filter(pareceCodigo).length / vs.length, largo: vs.filter(v => /^\d{11,16}$/.test(v)).length / vs.length,
+                texto: vs.filter(pareceTexto).length / vs.length, unicos: new Set(vs).size / vs.length });
+    }
+    const ids = st.filter(x => x.codigo >= 0.7 && x.unicos >= 0.3).sort((a, b) => b.unicos - a.unicos || b.n - a.n);
+    const desc = st.filter(x => x.texto >= 0.6).sort((a, b) => b.n - a.n)[0];
+    if (!ids.length || !desc) return null;
+    const mapa = {}, usadas = new Set([desc.c]);
+    const cod = ids.find(x => x.largo >= 0.8), otro = ids.find(x => x !== cod && x.largo < 0.8);
+    if (cod) { mapa.codigos = cod.c; usadas.add(cod.c); }
+    if (otro) { mapa[cod ? 'serial' : 'ref_base'] = otro.c; usadas.add(otro.c); }
+    mapa.descripcion = desc.c;
+    const idc = (cod || otro).c; let fila = -1;                                  // ¿hay una fila de títulos arriba?
+    for (let r = 0; r < Math.min(muestra.length, 30); r++) { const v = N.celda((muestra[r] || [])[idc]); if (v) { if (!pareceCodigo(v)) fila = r; break; } }
+    return { fila, mapa, usadas, contenido: true };
   }
 
   N.letraColumna = c => { let t = ''; c++; while (c > 0) { const m = (c - 1) % 26; t = String.fromCharCode(65 + m) + t; c = Math.floor((c - 1) / 26); } return t; };
@@ -285,18 +377,43 @@
     return Object.entries(out).map(([b, n]) => ({ b, n }));
   };
   N.nombreSede = b => String(b || '').replace(/_/g, ' ');
+  // "109", "CALLE_109", "Calle 109" → la misma tienda
+  N.sedeCanon = b => { const t = String(b == null ? '' : b).trim().replace(/^(\d+)\.0+$/, '$1'); return /^(calle[\s_]*)?109$/i.test(t) ? 'Calle_109' : t; };
+  // Sin columna de marca, la marca es el nombre de la hoja: "HACKETT" → "Hackett" (siglas como "H&B" se quedan)
+  N.marcaDeHoja = n => { const t = String(n || '').trim(); return /^[A-ZÁÉÍÓÚÑ ]{4,}$/.test(t) ? t.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()) : t; };
   N.esTransito = b => /^tran/i.test(String(b || ''));
 
   // hojas → { productos:[...], hojas:[resumen], avisos:[texto] }
-  N.parsearLibro = function (hojas) {
-    const porRef = new Map(); const resumen = []; const avisos = [];
+  // op.nombre: nombre de la colección (sirve de marca cuando la hoja se llama "Hoja1")
+  N.parsearLibro = function (hojas, op) {
+    op = op || {};
+    const porRef = new Map(), porCodigo = new Map(), porSerialG = new Map(), firmas = new Map(), conRefBase = new WeakSet(); const resumen = []; const avisos = [];
     hojas.forEach((h, hn) => { h._n = hn; });
-    for (const h of hojas) {
-      const enc = buscarEncabezado(h.filas);
-      if (!enc) { resumen.push({ nombre: h.nombre, usada: false, productos: 0 }); continue; }
+    // 1) encabezados reconocibles; 2) si ninguna hoja los tiene, se lee por lo que hay en las columnas
+    let encs = hojas.map(h => { const e = buscarEncabezado(h.filas); return e ? resolverColumnas(e, h.filas.slice(e.fila + 1)) : null; });
+    if (!encs.some(Boolean)) encs = hojas.map(h => porContenido(h.filas));
+    hojas.forEach((h, hi) => {
+      const enc = encs[hi];
+      if (!enc) { resumen.push({ nombre: h.nombre, usada: false, productos: 0 }); return; }
       const cab = h.filas[enc.fila] || [];
       const datos = h.filas.slice(enc.fila + 1);
-      const nCols = Math.max(cab.length, ...datos.map(f => (f || []).length));
+      const valoresCol = c => datos.map(f => N.celda((f || [])[c])).filter(Boolean);
+      // Una columna "REF" que en realidad trae la descripción ("CAMISA SPORT HARMONT & BLAINE BLANCO…")
+      if (enc.mapa.ref_base != null) {
+        const vs = valoresCol(enc.mapa.ref_base);
+        if (vs.length && vs.filter(pareceTexto).length >= 0.6 * vs.length) {
+          if (enc.mapa.descripcion == null) enc.mapa.descripcion = enc.mapa.ref_base;
+          delete enc.mapa.ref_base;
+        }
+      }
+      const nCols = Math.max(cab.length, ...datos.slice(0, 2000).map(f => (f || []).length));
+      // Códigos de barras en una columna sin título (ej. la primera columna vacía arriba)
+      if (enc.mapa.codigos == null) for (let c = 0; c < nCols; c++) {
+        if (enc.usadas.has(c) || claveColumna(cab[c])) continue;
+        const vs = valoresCol(c);
+        if (vs.length >= 5 && vs.filter(v => /^\d{11,16}$/.test(v)).length >= 0.8 * vs.length) { enc.mapa.codigos = c; enc.usadas.add(c); break; }
+      }
+      if (enc.mapa.ref_base == null && enc.mapa.codigos == null && enc.mapa.serial == null) { resumen.push({ nombre: h.nombre, usada: false, productos: 0 }); return; }
       // Columna del proceso de la foto (lista desplegable: no tiene foto, foto tomada, en el drive…).
       // Se reconoce por sus VALORES: muchas veces no tiene título o está corrida de columna.
       let colEstado = -1, mejor = 0;
@@ -312,65 +429,99 @@
           if (vals.every(v => N.estadoDeTexto(v))) colEstado = c;
         } });
       }
-      // Columnas extra (Estado en Vault, notas…): solo si tienen datos en 2+ filas o texto
+      // Columnas extra (Estado en Vault, notas, grupo…): con texto; sin costos, fechas ni totales
+      const idCols = ['ref_base', 'codigos', 'serial'].map(k => enc.mapa[k]).filter(c => c != null);
+      const nFilas = datos.filter(f => idCols.some(c => (f || [])[c] != null && String(f[c]).trim() !== '')).length;
       const extras = [];
       for (let c = 0; c < nCols; c++) {
         if (enc.usadas.has(c) || c === colEstado) continue;
-        const vals = datos.map(f => (f || [])[c]).filter(v => v != null && String(v).trim() !== '');
+        const vals = valoresCol(c);
         if (!vals.length) continue;
-        if (vals.length < 2 && /^-?[\d.,]+$/.test(String(vals[0]).trim())) continue;   // bloque de totales
-        extras.push({ c, nombre: String(cab[c] || '').trim() || 'Nota' });
+        const tit = N.norm(cab[c]);
+        if (tit && (NO_EXTRA.test(tit) || N.estadoDeTexto(cab[c]))) continue;            // costos, fechas, resúmenes
+        if (vals.filter(esNum).length >= 0.8 * vals.length) continue;                    // números sueltos (totales, códigos internos)
+        const filasCon = datos.map((f, i) => ((f || [])[c] != null && String(f[c]).trim() !== '') ? i : -1).filter(i => i >= 0);
+        if (nFilas >= 10 && filasCon.length <= 3 && filasCon.every(i => i < 5)) continue;  // resumen al lado de la tabla
+        const et = ETIQUETA_EXTRA.find(([re]) => re.test(tit));
+        extras.push({ c, nombre: et ? et[1] : (String(cab[c] || '').trim() || 'Nota') });
       }
+      const generica = /^(hoja|sheet|tabelle|feuille|foglio|planilha|plan)\s*\d*$/i.test(String(h.nombre || '').trim());
+      const refEsBase = enc.mapa.ref_base != null && /ref(erencia)?\.?\s*base/.test(N.norm(cab[enc.mapa.ref_base]));
       let n = 0;
       datos.forEach((f, i) => {
         f = f || [];
-        const g = k => enc.mapa[k] != null ? String(f[enc.mapa[k]] == null ? '' : f[enc.mapa[k]]).trim() : '';
+        const g = k => enc.mapa[k] != null ? N.celda(f[enc.mapa[k]]) : '';
         const codigosTxt = g('codigos'), refTxt = g('ref_base'), serial = g('serial');
         if (!codigosTxt && !refTxt && !serial) return;
         if (N.norm(refTxt) && claveColumna(refTxt) === 'ref_base') return;          // encabezado repetido
+        if (N.norm(serial) && claveColumna(serial) === 'serial') return;
+        if (enc.contenido && !pareceCodigo(refTxt || serial || codigosTxt.split(/[\s,;|]+/)[0] || '')) return;   // títulos o totales
         const alertas = [];
-        const codigos = [...new Set(N.partirLista(codigosTxt, /[\s,;|]+/).map(N.limpiar).filter(c => c.length >= 4))];
+        const codigos = [...new Set(N.partirLista(codigosTxt, /[\s,;|]+/).map(N.celda).map(N.limpiar).filter(c => c.length >= 4))];
         let ref = N.limpiar(refTxt);
-        if (!ref && codigos.length) { ref = codigos[0].length > 6 ? codigos[0].slice(0, -2) : codigos[0]; alertas.push('Sin referencia base: se tomó del código'); }
+        if (!ref && codigos.length) { ref = codigos[0].length > 6 ? codigos[0].slice(0, -2) : codigos[0]; }
         if (!ref) ref = N.limpiar(serial);
         if (!ref) return;
         const tallasArr = N.partirLista(g('tallas'));
-        codigos.forEach(c => {
-          if (refTxt && !c.startsWith(ref)) alertas.push(`El código ${c} no corresponde a la referencia ${ref}`);
+        if (refEsBase) codigos.forEach(c => {                   // solo donde la Ref base es el inicio del código (Excel de digital)
+          if (!N.sinCeros(c).startsWith(N.sinCeros(ref))) alertas.push(`El código ${c} no corresponde a la referencia ${ref}`);
           if (c.length > ref.length + 4) alertas.push(`El código ${c} parece mal escrito (muy largo)`);
         });
         if (codigos.length > 1 && tallasArr.length && tallasArr.length !== codigos.length) alertas.push('Las tallas no coinciden con los códigos');
         const cantTxt = g('cantidad').replace(/[^\d.-]/g, '');
         const ecoTxt = N.norm(g('ecommerce'));
         const extra = {};
-        extras.forEach(x => { const v = f[x.c]; if (v != null && String(v).trim() !== '') extra[x.nombre] = String(v).trim(); });
+        extras.forEach(x => { const v = N.celda(f[x.c]); if (v) extra[x.nombre] = v; });
         const estadoExcel = colEstado >= 0 ? N.estadoDeTexto(f[colEstado]) : null;
+        const desc = g('descripcion');
+        // Una fila por talla (listas del sistema): la talla escrita en la descripción ("… T-M") manda sobre un código de talla ("2")
+        let tallasFin = tallasArr;
+        if (codigos.length <= 1) { const mt = /\bT-\s?(\d{1,2}(?:[.,]5)?|X{0,3}[SML]|XX?L|U(?:NICA)?)\b/i.exec(desc); if (mt && (!tallasFin.length || /^\d$/.test(tallasFin[0]))) tallasFin = [mt[1].toUpperCase()]; }
+        const cantN = cantTxt && isFinite(Number(cantTxt)) ? Number(cantTxt) : null;
+        const bodTxt = g('bodegas'); const bods = N.parsearBodegas(bodTxt).map(x => ({ b: N.sedeCanon(x.b), n: x.n }));
+        if (bods.length === 1 && !/\(\s*\d+\s*\)/.test(bodTxt) && cantN > 0) bods[0].n = cantN;   // una sola tienda: sus unidades
         const prod = {
           estado_excel: estadoExcel, hoja_n: h._n,
-          ref_base: ref, hoja: h.nombre, marca: g('marca') || h.nombre, serial, plu: g('plu'),
-          codigos, tallas: tallasArr,
-          descripcion: g('descripcion'), bodegas: N.parsearBodegas(g('bodegas')),
-          cantidad: cantTxt ? Number(cantTxt) : null, precio: g('precio'),
+          ref_base: ref, hoja: h.nombre, marca: g('marca') || (generica ? (op.nombre || h.nombre) : N.marcaDeHoja(h.nombre)), serial, plu: g('plu'),
+          codigos, tallas: tallasFin,
+          descripcion: desc, bodegas: bods,
+          cantidad: cantN, precio: g('precio'),
           ecommerce: ecoTxt ? /^(si|s|x|yes|true|1)$/.test(ecoTxt) : null,
           extra, alertas, fila: enc.fila + 2 + i
         };
         n++;
-        const prev = porRef.get(ref);
-        if (prev) {                                                          // misma referencia dos veces: se unen
+        // La misma referencia (o el mismo código de barras) en otra fila u otra hoja: se unen
+        // sin columna de referencia: el mismo serial es el mismo producto (mismo estilo y color, aunque venga de otra importación)
+        const kSerial = enc.mapa.ref_base == null && N.alnum(serial).length >= 4 ? h._n + ':' + N.alnum(serial) : '';
+        const prev = porRef.get(ref) || prod.codigos.map(c => porCodigo.get(c)).find(Boolean) || (kSerial && porSerialG.get(kSerial));
+        if (prev) {
+          const nuevoCod = prod.codigos.some(c => !prev.codigos.includes(c)), mismaHoja = prev.hoja === prod.hoja;
+          const fs = firmas.get(prev) || new Set(), firma = prod.hoja + '|' + prod.codigos.join(',') + '|' + prod.bodegas.map(x => x.b).join(',');
+          const repetida = mismaHoja && fs.has(firma);           // la misma fila otra vez (no otra talla ni otra tienda)
+          fs.add(firma); firmas.set(prev, fs);
           const mapaT = new Map(prev.codigos.map((c, k) => [c, prev.tallas[k]]));
           prod.codigos.forEach((c, k) => { if (!mapaT.has(c)) mapaT.set(c, prod.tallas[k]); });
           prev.codigos = [...mapaT.keys()]; prev.tallas = [...mapaT.values()].map(t => t == null ? '' : t);
-          const b = {}; [...prev.bodegas, ...prod.bodegas].forEach(x => { b[x.b] = (b[x.b] || 0) + x.n; });
-          prev.bodegas = Object.entries(b).map(([k, v]) => ({ b: k, n: v }));
-          if (prod.cantidad != null) prev.cantidad = (prev.cantidad || 0) + prod.cantidad;
+          if (!prev.codigos.length && prod.tallas.length) prev.tallas = [...new Set([...prev.tallas, ...prod.tallas])];
+          if (nuevoCod || (mismaHoja && !repetida)) {          // la misma fila en otra hoja no suma dos veces
+            const bb = {}; [...prev.bodegas, ...prod.bodegas].forEach(x => { bb[x.b] = (bb[x.b] || 0) + x.n; });
+            prev.bodegas = Object.entries(bb).map(([k, v]) => ({ b: k, n: v }));
+            if (prod.cantidad != null) prev.cantidad = (prev.cantidad || 0) + prod.cantidad;
+          }
           if ((N.ORDEN[prod.estado_excel] ?? -1) > (N.ORDEN[prev.estado_excel] ?? -1)) prev.estado_excel = prod.estado_excel;
-          prev.alertas = [...new Set([...prev.alertas, ...prod.alertas, `Referencia repetida (hoja ${prod.hoja}, fila ${prod.fila})`])];
-          Object.assign(prev.extra, prod.extra);
-        } else porRef.set(ref, prod);
+          if (!prev.descripcion && prod.descripcion) prev.descripcion = prod.descripcion;
+          if (!prev.serial && prod.serial) prev.serial = prod.serial;
+          // repetida de verdad (mismo código o sin códigos), no una talla más de la misma referencia
+          if (repetida) prev.alertas = [...new Set([...prev.alertas, ...prod.alertas, `Referencia repetida (hoja ${prod.hoja}, fila ${prod.fila})`])];
+          Object.keys(prod.extra).forEach(k => { if (prev.extra[k] == null) prev.extra[k] = prod.extra[k]; });
+          prev.codigos.forEach(c => porCodigo.set(c, prev));
+          if (kSerial && !porSerialG.has(kSerial)) porSerialG.set(kSerial, prev);
+        } else { porRef.set(ref, prod); prod.codigos.forEach(c => { if (!porCodigo.has(c)) porCodigo.set(c, prod); }); if (kSerial) porSerialG.set(kSerial, prod);
+                 firmas.set(prod, new Set([prod.hoja + '|' + prod.codigos.join(',') + '|' + prod.bodegas.map(x => x.b).join(',')])); if (refEsBase) conRefBase.add(prod); }
       });
-      resumen.push({ nombre: h.nombre, usada: true, productos: n, columnas: Object.keys(enc.mapa), fila_encabezado: enc.fila + 1,
+      resumen.push({ nombre: h.nombre, usada: true, productos: n, columnas: Object.keys(enc.mapa), fila_encabezado: enc.fila + 1, por_contenido: !!enc.contenido,
                      columna_estado: colEstado >= 0 ? N.letraColumna(colEstado) : null });
-    }
+    });
     const productos = [...porRef.values()];
     // Cuántas hay en cada paso según el Excel, por hoja
     resumen.forEach(r => { if (r.usada) {
@@ -380,7 +531,7 @@
     } });
     // serial repetido en referencias distintas
     const porSerial = new Map();
-    productos.forEach(p => { const s = N.alnum(p.serial); if (s.length >= 6 && /\d/.test(s)) { if (!porSerial.has(s)) porSerial.set(s, []); porSerial.get(s).push(p); } });
+    productos.forEach(p => { const s = N.alnum(p.serial); if (conRefBase.has(p) && s.length >= 6 && /\d/.test(s)) { if (!porSerial.has(s)) porSerial.set(s, []); porSerial.get(s).push(p); } });
     porSerial.forEach(arr => { if (arr.length > 1) arr.forEach(p => p.alertas.push(`Serial repetido en: ${arr.filter(x => x !== p).map(x => x.ref_base).join(', ')}`)); });
     productos.forEach(p => { p.alertas = [...new Set(p.alertas)]; });
     if (!productos.length) avisos.push('No encontré columnas de referencia o códigos en ninguna hoja.');
